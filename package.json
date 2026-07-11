@@ -1,0 +1,31 @@
+{
+  "name": "invoice-decision-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI agent that turns invoice PDFs into clear, reasoned decisions — extraction by vision LLM, decisions by deterministic rules, every step visible.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "seed": "tsx scripts/seed.ts",
+    "golden": "tsx scripts/warm_fixtures.ts && tsx scripts/golden.ts",
+    "warm-fixtures": "tsx scripts/warm_fixtures.ts",
+    "generate-pdfs": "tsx scripts/generate_pdfs.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "next": "^15.3.0",
+    "pdf-lib": "^1.17.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}

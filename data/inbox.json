@@ -1,0 +1,17 @@
+{
+  "_note": "Simulated vendor inbox (LocalInboxSource). Each message references a real PDF in data/inbox/. Demo-curated order.",
+  "messages": [
+    { "id": "m01", "from_addr": "billing@acmeoffice.com", "subject": "Invoice ACM-2026-0451 — Office supplies (PO-2026-0100)", "received_at": "2026-07-08T09:14:00Z", "attachment": "INV_001_clean_acme_office.pdf", "status": "unread" },
+    { "id": "m02", "from_addr": "invoices@metrocleaning.com", "subject": "Metro Cleaning — Invoice MC-2026-0312", "received_at": "2026-07-08T11:02:00Z", "attachment": "INV_002_clean_metro_cleaning.pdf", "status": "unread" },
+    { "id": "m03", "from_addr": "billing@acmeoffice.com", "subject": "Scanned copy — Acme invoice (resend)", "received_at": "2026-07-09T08:40:00Z", "attachment": "GEN_scanned_acme.pdf", "status": "unread" },
+    { "id": "m04", "from_addr": "ap@globaltech.io", "subject": "GlobalTech invoice GT-2026-0088 (PO-2026-0101)", "received_at": "2026-07-09T10:25:00Z", "attachment": "INV_004_amount_mismatch_globaltech.pdf", "status": "unread" },
+    { "id": "m05", "from_addr": "billing@acmeoffice.com", "subject": "Re: Invoice ACM-2026-0451 — resending as requested", "received_at": "2026-07-09T16:55:00Z", "attachment": "INV_006_duplicate_of_001.pdf", "status": "unread" },
+    { "id": "m06", "from_addr": "invoices@metrocleaning.com", "subject": "Q3 deep clean — July invoice (PO-2026-0108)", "received_at": "2026-07-10T09:05:00Z", "attachment": "GEN_split_metro_1.pdf", "status": "unread" },
+    { "id": "m07", "from_addr": "invoices@metrocleaning.com", "subject": "Q3 deep clean — August invoice (PO-2026-0108)", "received_at": "2026-07-10T09:06:00Z", "attachment": "GEN_split_metro_2.pdf", "status": "unread" },
+    { "id": "m08", "from_addr": "invoices@metrocleaning.com", "subject": "Q3 deep clean — September invoice + extras (PO-2026-0108)", "received_at": "2026-07-10T09:07:00Z", "attachment": "GEN_split_metro_3.pdf", "status": "unread" },
+    { "id": "m09", "from_addr": "accounts@globaltech-pay.com", "subject": "URGENT — Updated bank details, invoice GT-2026-0095", "received_at": "2026-07-10T14:31:00Z", "attachment": "GEN_fraud_globaltech.pdf", "status": "unread" },
+    { "id": "m10", "from_addr": "billing@novatechgroup.co", "subject": "Consulting services — final notice", "received_at": "2026-07-11T08:12:00Z", "attachment": "INV_013_suspicious_round_amount.pdf", "status": "unread" },
+    { "id": "m11", "from_addr": "ap@globaltech.io", "subject": "EU entity invoice GT-EU-2026-0012", "received_at": "2026-07-11T09:44:00Z", "attachment": "INV_012_multicurrency_eur.pdf", "status": "unread" },
+    { "id": "m12", "from_addr": "hello@quickship.example", "subject": "Invoice attached", "received_at": "2026-07-11T10:20:00Z", "attachment": "GEN_missing_fields.pdf", "status": "unread" }
+  ]
+}

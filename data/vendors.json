@@ -1,0 +1,13 @@
+{
+  "_note": "Vendor master. Adapted from reference seed; coherent with sample invoice PDFs. Editable — replace with your own vendor list.",
+  "bill_to": { "name": "TechCorp Inc.", "address": "456 Innovation Way, Austin, TX 78701", "tax_id": "74-1234567" },
+  "vendors": [
+    { "external_id": "V001", "name": "Acme Office Supplies", "aliases": ["Acme Corp", "ACME OFFICE SUPPLIES INC"], "email": "billing@acmeoffice.com", "email_domain": "acmeoffice.com", "tax_id": "12-3456789", "bank_account_last4": "4521", "status": "active" },
+    { "external_id": "V002", "name": "GlobalTech Solutions", "aliases": ["GlobalTech", "GLOBALTECH SOLUTIONS LLC"], "email": "ap@globaltech.io", "email_domain": "globaltech.io", "tax_id": "98-7654321", "bank_account_last4": "8833", "status": "active" },
+    { "external_id": "V003", "name": "Metro Cleaning Services", "aliases": ["Metro Cleaners", "METRO CLEANING SVC"], "email": "invoices@metrocleaning.com", "email_domain": "metrocleaning.com", "tax_id": "55-1234567", "bank_account_last4": "6102", "status": "active" },
+    { "external_id": "V004", "name": "Prime Logistics Inc", "aliases": ["Prime Logistics", "PRIME LOGISTICS"], "email": "finance@primelogistics.com", "email_domain": "primelogistics.com", "tax_id": "33-9876543", "bank_account_last4": "7750", "status": "active" },
+    { "external_id": "V005", "name": "DataVault Cloud Services", "aliases": ["DataVault", "DATAVAULT CLOUD"], "email": "billing@datavault.cloud", "email_domain": "datavault.cloud", "tax_id": "77-5551234", "bank_account_last4": "3319", "status": "active" },
+    { "external_id": "V006", "name": "Riverside Catering Co", "aliases": ["Riverside Catering"], "email": "orders@riversidecatering.com", "email_domain": "riversidecatering.com", "tax_id": "44-6667788", "bank_account_last4": "2200", "status": "inactive" },
+    { "external_id": "V007", "name": "ArgentoHome", "aliases": ["Argento Home", "ARGENTOHOME LLC"], "email": "billing@argentohome.com", "email_domain": "argentohome.com", "tax_id": "61-4482019", "bank_account_last4": "5514", "status": "active" }
+  ]
+}

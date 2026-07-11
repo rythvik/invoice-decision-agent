@@ -1,0 +1,43 @@
+{
+  "_note": "PO register (all amounts ex-tax, USD). PO-2026-0108 added for the split-PO edge case.",
+  "purchase_orders": [
+    { "po_number": "PO-2026-0100", "vendor_external_id": "V001", "status": "open", "currency": "USD", "total_amount": 4250.0,
+      "line_items": [
+        { "description": "Premium Copy Paper (Case)", "qty": 50, "unit_price": 45.0, "total": 2250.0 },
+        { "description": "Ink Cartridges - Black", "qty": 20, "unit_price": 65.0, "total": 1300.0 },
+        { "description": "Desk Organizer Set", "qty": 10, "unit_price": 70.0, "total": 700.0 } ] },
+    { "po_number": "PO-2026-0101", "vendor_external_id": "V002", "status": "open", "currency": "USD", "total_amount": 18500.0,
+      "line_items": [
+        { "description": "Annual Software License - Enterprise", "qty": 1, "unit_price": 12000.0, "total": 12000.0 },
+        { "description": "Implementation Support (hours)", "qty": 50, "unit_price": 130.0, "total": 6500.0 } ] },
+    { "po_number": "PO-2026-0102", "vendor_external_id": "V003", "status": "open", "currency": "USD", "total_amount": 3600.0,
+      "line_items": [
+        { "description": "Monthly Office Cleaning - Floor 1", "qty": 1, "unit_price": 1200.0, "total": 1200.0 },
+        { "description": "Monthly Office Cleaning - Floor 2", "qty": 1, "unit_price": 1200.0, "total": 1200.0 },
+        { "description": "Monthly Office Cleaning - Floor 3", "qty": 1, "unit_price": 1200.0, "total": 1200.0 } ] },
+    { "po_number": "PO-2026-0103", "vendor_external_id": "V004", "status": "open", "currency": "USD", "total_amount": 7800.0,
+      "line_items": [
+        { "description": "Freight Shipping - Domestic (pallets)", "qty": 12, "unit_price": 450.0, "total": 5400.0 },
+        { "description": "Warehouse Storage (monthly)", "qty": 1, "unit_price": 2400.0, "total": 2400.0 } ] },
+    { "po_number": "PO-2026-0104", "vendor_external_id": "V005", "status": "open", "currency": "USD", "total_amount": 9600.0,
+      "line_items": [
+        { "description": "Cloud Hosting - Production (monthly)", "qty": 12, "unit_price": 600.0, "total": 7200.0 },
+        { "description": "Cloud Backup Service (monthly)", "qty": 12, "unit_price": 200.0, "total": 2400.0 } ] },
+    { "po_number": "PO-2026-0105", "vendor_external_id": "V001", "status": "open", "currency": "USD", "total_amount": 1850.0,
+      "line_items": [
+        { "description": "Ergonomic Mouse", "qty": 25, "unit_price": 34.0, "total": 850.0 },
+        { "description": "USB-C Docking Station", "qty": 10, "unit_price": 100.0, "total": 1000.0 } ] },
+    { "po_number": "PO-2026-0106", "vendor_external_id": "V004", "status": "open", "currency": "USD", "total_amount": 15000.0,
+      "line_items": [
+        { "description": "International Freight - Container", "qty": 2, "unit_price": 5500.0, "total": 11000.0 },
+        { "description": "Customs Brokerage Fee", "qty": 2, "unit_price": 750.0, "total": 1500.0 },
+        { "description": "Insurance - Cargo", "qty": 2, "unit_price": 1250.0, "total": 2500.0 } ] },
+    { "po_number": "PO-2026-0107", "vendor_external_id": "V007", "status": "open", "currency": "USD", "total_amount": 253.66,
+      "line_items": [ { "description": "Home Furnishing Items", "qty": 1, "unit_price": 253.66, "total": 253.66 } ] },
+    { "po_number": "PO-2026-0108", "vendor_external_id": "V003", "status": "open", "currency": "USD", "total_amount": 3600.0,
+      "line_items": [
+        { "description": "Quarterly Deep Cleaning - Q3 (Jul)", "qty": 1, "unit_price": 1200.0, "total": 1200.0 },
+        { "description": "Quarterly Deep Cleaning - Q3 (Aug)", "qty": 1, "unit_price": 1200.0, "total": 1200.0 },
+        { "description": "Quarterly Deep Cleaning - Q3 (Sep)", "qty": 1, "unit_price": 1200.0, "total": 1200.0 } ] }
+  ]
+}

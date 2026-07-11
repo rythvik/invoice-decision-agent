@@ -1,0 +1,11 @@
+node_modules/
+.next/
+storage/*.db
+storage/*.db-journal
+data/.extraction_cache/
+data/inbox/UP_*.pdf
+.env.local
+.env
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store

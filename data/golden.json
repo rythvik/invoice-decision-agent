@@ -1,0 +1,24 @@
+{
+  "_note": "Golden test map: file → expected outcome (+ reason codes that MUST be present). Order matters: 001 before 006 (duplicate); split series in sequence; splits 1-2 must be APPROVEd for 3 to over-bill.",
+  "cases": [
+    { "file": "INV_001_clean_acme_office.pdf", "expect": "APPROVE", "must_include": [], "note": "happy path; subtotal 4250 = PO-2026-0100" },
+    { "file": "INV_002_clean_metro_cleaning.pdf", "expect": "APPROVE", "must_include": [], "note": "clean, zero tax" },
+    { "file": "INV_003_clean_datavault.pdf", "expect": "APPROVE", "must_include": [], "note": "800 vs 9600 PO — monthly billing, under is fine" },
+    { "file": "INV_004_amount_mismatch_globaltech.pdf", "expect": "REVIEW", "must_include": ["AMOUNT_SIGNIFICANTLY_OVER"], "priority": "high", "note": "20450 vs 18500 = 10.54% over" },
+    { "file": "INV_005_amount_mismatch_prime.pdf", "expect": "REVIEW", "must_include": ["AMOUNT_OVER_TOLERANCE"], "note": "8232 vs 7800 = 5.54% over" },
+    { "file": "INV_006_duplicate_of_001.pdf", "expect": "REVIEW", "must_include": ["DUPLICATE"], "note": "same number+vendor as INV_001" },
+    { "file": "INV_007_unknown_vendor.pdf", "expect": "REVIEW", "must_include": ["UNKNOWN_VENDOR", "PO_NOT_FOUND"], "note": "NovaTech not in master" },
+    { "file": "INV_008_bank_change_globaltech.pdf", "expect": "REVIEW", "must_include": ["BANK_ACCOUNT_CHANGED"], "security": true, "note": "BEC pattern" },
+    { "file": "INV_009_no_po_riverside.pdf", "expect": "REVIEW", "must_include": ["VENDOR_INACTIVE", "PO_NOT_FOUND"], "note": "inactive vendor, event expense" },
+    { "file": "INV_011_scanned_style_prime.pdf", "expect": "APPROVE", "must_include": [], "note": "15000 = PO-2026-0106" },
+    { "file": "INV_012_multicurrency_eur.pdf", "expect": "REVIEW", "must_include": ["CURRENCY_MISMATCH"], "note": "EUR vs USD PO — never numerically compared" },
+    { "file": "INV_013_suspicious_round_amount.pdf", "expect": "REVIEW", "must_include": ["UNKNOWN_VENDOR", "ROUND_AMOUNT_NO_DETAIL"], "security": true, "priority": "high", "note": "round 50k, single line, unknown vendor" },
+    { "file": "GEN_scanned_acme.pdf", "expect": "APPROVE", "must_include": [], "note": "EDGE 1: image-only PDF, vision extraction" },
+    { "file": "GEN_split_metro_1.pdf", "expect": "APPROVE", "must_include": [], "note": "EDGE 3a: 1200 vs PO-0108 (3600)" },
+    { "file": "GEN_split_metro_2.pdf", "expect": "APPROVE", "must_include": [], "note": "EDGE 3b: cumulative 2400 — fine" },
+    { "file": "GEN_split_metro_3.pdf", "expect": "REVIEW", "must_include": ["PO_OVERBILLED"], "priority": "high", "note": "EDGE 3c: cumulative 3960 > 3780 (105% of PO)" },
+    { "file": "GEN_fraud_globaltech.pdf", "expect": "REVIEW", "must_include": ["BANK_ACCOUNT_CHANGED", "URGENCY_LANGUAGE"], "security": true, "priority": "high", "note": "EDGE 4: BEC composite — bank change + urgency + lookalike domain" },
+    { "file": "GEN_missing_fields.pdf", "expect": "HOLD", "must_include": ["MISSING_CRITICAL_FIELD"], "note": "no invoice number, no total" },
+    { "file": "GEN_not_invoice.pdf", "expect": "HOLD", "must_include": ["NOT_AN_INVOICE"], "note": "a plain business letter" }
+  ]
+}
