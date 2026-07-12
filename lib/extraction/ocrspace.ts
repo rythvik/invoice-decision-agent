@@ -64,9 +64,10 @@ export class OcrSpaceProvider implements ExtractionProvider {
     if (!invMatch) invMatch = text.match(/(?:^|\n)#\s*([A-Za-z0-9\-\.\/]+)/mi);
     if (invMatch) inv.invoice_number = invMatch[1];
 
-    // PO number — look for "PO Number:" or "PO:" followed by PO-XXXX pattern
-    let poMatch = text.match(/PO\s+(?:Number|#)[:\s]+([A-Z0-9\-]+)/i);
+    // PO number — look for "PO Number:", "PO Reference:", "PO:", "Purchase Order:" patterns
+    let poMatch = text.match(/PO\s+(?:Number|Reference|#)[:\s]+([A-Z0-9\-]+)/i);
     if (!poMatch) poMatch = text.match(/(?:Purchase\s+Order)[:\s#]+([A-Z0-9\-]+)/i);
+    if (!poMatch) poMatch = text.match(/(?:^|\n)PO[:\s]+([A-Z0-9\-]+)/mi);
     if (poMatch) inv.po_reference = poMatch[1];
 
     // Vendor name (first substantial line)
@@ -85,18 +86,19 @@ export class OcrSpaceProvider implements ExtractionProvider {
       if (dateMatches[1]) inv.due_date = dateMatches[1];
     }
 
-    // Total — try different patterns: "TOTAL DUE", "Total", "Amount Due" (possibly with line breaks)
+    // Total — try different patterns: "TOTAL DUE", "Total", "Amount Due" (handles line breaks)
     let totalMatch = text.match(/(?:TOTAL|Amount)\s+DUE[\s\n]*[\$€₹]?\s*([\d,]+\.?\d*)/i);
     if (!totalMatch) totalMatch = text.match(/(?:^|\n)(?:Total|Grand\s+Total)[:\s]+[\$€₹]?\s*([\d,]+(?:\.\d{1,2})?)/mi);
     if (!totalMatch) totalMatch = text.match(/(?:^|\n)Amount\s+Due[\s\n:]*[\$€₹]?\s*([\d,]+(?:\.\d{1,2})?)/mi);
-    // Fallback: look for highest amount (handles both $4600 and $4600.50 formats)
-    if (!totalMatch) {
+
+    if (totalMatch) {
+      inv.total = parseFloat(totalMatch[1].replace(/,/g, ""));
+    } else {
+      // Fallback: look for highest amount (handles both $4600 and $4600.50 formats)
       const amounts = text.match(/[\$€₹]?\s*([\d,]+(?:\.\d{1,2})?)/g);
       if (amounts && amounts.length > 0) {
         inv.total = parseFloat(amounts[amounts.length - 1].replace(/[\$€₹\s,]/g, ""));
       }
-    } else {
-      inv.total = parseFloat(totalMatch[1].replace(/,/g, ""));
     }
 
     // Subtotal
