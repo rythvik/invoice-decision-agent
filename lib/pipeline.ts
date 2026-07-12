@@ -2,8 +2,8 @@
 // LLM only inside stage 3. Every stage emits a StageEvent (stream + persist + audit).
 import { randomUUID } from "crypto";
 import { PDFDocument, PDFName, PDFRawStream, PDFArray, decodePDFRawStream } from "pdf-lib";
-import { createRun, finishRun, getVendors, getPOs, approvedToDate, saveEvent } from "./db";
-import { getProvider } from "./extraction";
+import { createInvoice, finishInvoice, getVendors, getPOs, approvedToDate, saveEvent } from "./db";
+import { getProvider, mimeFor } from "./extraction";
 import { matchPo, matchVendor } from "./matching";
 import { aggregate, money, runRules, type CheckResult } from "./rules/engine";
 import type { Decision, ExtractedInvoice, Reason, StageEvent } from "./types";
@@ -18,12 +18,14 @@ function reason(code: string, category: Reason["category"], severity: Reason["se
 }
 
 /**
- * Process one invoice PDF. Async generator: yields StageEvents as they happen.
- * Fully autonomous — never pauses for input; always ends with a decision.
+ * Process one invoice document (PDF or image). Async generator: yields StageEvents
+ * as they happen. Fully autonomous — never pauses for input; always ends with a decision.
  */
-export async function* processInvoice(pdf: Buffer, filename: string, source: string): AsyncGenerator<StageEvent, RunResult> {
+export async function* processInvoice(bytes: Buffer, filename: string, source: string, inboxId: string | null = null): AsyncGenerator<StageEvent, RunResult> {
   const runId = randomUUID().slice(0, 8);
-  createRun(runId, source, filename);
+  const mime = mimeFor(filename);
+  const isImage = mime.startsWith("image/");
+  createInvoice(runId, source, filename, inboxId);
 
   let seq = 0;
   const emit = (name: string, title: string, status: StageEvent["status"], summary: string, details: Record<string, unknown>, startedAt: string): StageEvent => {
@@ -39,16 +41,18 @@ export async function* processInvoice(pdf: Buffer, filename: string, source: str
   // ── 1 · intake ────────────────────────────────────────────────
   let t = now();
   yield emit("intake", "Received the invoice", "done",
-    `${filename} · ${(pdf.length / 1024).toFixed(1)} KB`, { filename, bytes: pdf.length, source }, t);
+    `${filename} · ${(bytes.length / 1024).toFixed(1)} KB`, { filename, bytes: bytes.length, source, mime }, t);
 
   // ── 2 · classify ──────────────────────────────────────────────
   t = now();
-  const kind = await probeDocumentKind(pdf);
+  const kind: "digital" | "scanned" = isImage ? "scanned" : await probeDocumentKind(bytes);
   yield emit("classify", "Read the document", "done",
-    kind === "digital"
-      ? "Clean digital document — text is machine-readable"
-      : "This looks like a scanned image — no text layer, reading it visually",
-    { document_kind: kind, probe: "page-resources font probe (pdf-lib)" }, t);
+    isImage
+      ? "This is an image invoice — reading it visually"
+      : kind === "digital"
+        ? "Clean digital document — text is machine-readable"
+        : "This looks like a scanned image — no text layer, reading it visually",
+    { document_kind: kind, mime, probe: isImage ? "image attachment" : "page-resources font probe" }, t);
 
   // ── 3 · extract (the ONLY LLM stage) ─────────────────────────
   t = now();
@@ -57,9 +61,9 @@ export async function* processInvoice(pdf: Buffer, filename: string, source: str
   try {
     const provider = getProvider();
     try {
-      inv = await provider.extract(pdf, { kind });
+      inv = await provider.extract(bytes, { kind, mime });
     } catch {
-      inv = await provider.extract(pdf, { kind }); // one retry, then HOLD (SPEC reliability rule)
+      inv = await provider.extract(bytes, { kind, mime }); // one retry, then HOLD (SPEC reliability rule)
     }
   } catch (e: any) {
     extractionError = String(e?.message ?? e);
@@ -263,7 +267,7 @@ function buildDecision(
 }
 
 function persistDecision(runId: string, d: Decision, inv: ExtractedInvoice | null, vendorExt: string | null, amountBasis: number | null): void {
-  finishRun(runId, {
+  finishInvoice(runId, {
     outcome: d.outcome,
     priority: d.priority,
     security: d.security ? 1 : 0,

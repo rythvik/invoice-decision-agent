@@ -1,21 +1,36 @@
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
-import type { InboxMessage, PurchaseOrder, StageEvent, Vendor } from "./types";
+import type { ExtractedInvoice, InboxMessage, PurchaseOrder, StageEvent, Vendor } from "./types";
 
-const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), "storage", "app.db");
+// Resolved lazily (not at import time) so scripts can set DB_PATH before the first
+// db() call — ESM hoists imports above top-level assignments, so a module-level
+// const would capture the default before an override runs.
+function dbPath(): string {
+  return process.env.DB_PATH || path.join(process.cwd(), "storage", "app.db");
+}
+function mailDir(): string {
+  return path.join(path.dirname(dbPath()), "mail"); // fetched attachment bytes live here
+}
 
 let _db: Database.Database | null = null;
 
 export function db(): Database.Database {
   if (_db) return _db;
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  _db = new Database(DB_PATH);
+  const p = dbPath();
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  _db = new Database(p);
   _db.pragma("journal_mode = WAL");
   _db.exec(SCHEMA);
   return _db;
 }
 
+// Tables (all browsable in any SQLite viewer):
+//   vendors / purchase_orders = the masters
+//   invoices                  = each processed invoice + its decision
+//   audit_log                 = the step-by-step trail for every invoice
+//   inbox                     = received emails (real, via IMAP)
+//   extraction_cache          = one row per unique document read (avoids re-calling the LLM)
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS vendors (
   external_id TEXT PRIMARY KEY, name TEXT NOT NULL, aliases_json TEXT NOT NULL DEFAULT '[]',
@@ -27,9 +42,9 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   currency TEXT NOT NULL DEFAULT 'USD', total_amount REAL NOT NULL, line_items_json TEXT NOT NULL DEFAULT '[]',
   created_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS runs (
+CREATE TABLE IF NOT EXISTS invoices (
   id TEXT PRIMARY KEY, source TEXT NOT NULL, filename TEXT NOT NULL,
-  started_at TEXT NOT NULL, finished_at TEXT,
+  inbox_id TEXT, started_at TEXT NOT NULL, finished_at TEXT,
   outcome TEXT, priority TEXT, security INTEGER NOT NULL DEFAULT 0,
   headline TEXT, reasons_json TEXT, matched_po TEXT,
   invoice_number TEXT, vendor_external_id TEXT, vendor_name TEXT,
@@ -37,96 +52,99 @@ CREATE TABLE IF NOT EXISTS runs (
   extracted_json TEXT, checks_passed INTEGER, checks_total INTEGER,
   resolution TEXT, resolution_note TEXT, resolved_at TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at);
-CREATE INDEX IF NOT EXISTS idx_runs_invnum ON runs(invoice_number);
-CREATE TABLE IF NOT EXISTS stage_events (
-  id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, stage INTEGER NOT NULL,
+CREATE INDEX IF NOT EXISTS idx_invoices_started ON invoices(started_at);
+CREATE INDEX IF NOT EXISTS idx_invoices_invnum ON invoices(invoice_number);
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_id TEXT NOT NULL, stage INTEGER NOT NULL,
   name TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, summary TEXT NOT NULL,
   details_json TEXT NOT NULL DEFAULT '{}', started_at TEXT NOT NULL, duration_ms INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_events_run ON stage_events(run_id);
-CREATE TABLE IF NOT EXISTS inbox_messages (
+CREATE INDEX IF NOT EXISTS idx_audit_invoice ON audit_log(invoice_id);
+CREATE TABLE IF NOT EXISTS inbox (
   id TEXT PRIMARY KEY, from_addr TEXT NOT NULL, subject TEXT NOT NULL,
-  received_at TEXT NOT NULL, attachment TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'unread', run_id TEXT
+  received_at TEXT NOT NULL, attachments_json TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'unread'
+);
+CREATE TABLE IF NOT EXISTS extraction_cache (
+  hash TEXT PRIMARY KEY, filename TEXT, extracted_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY, value TEXT NOT NULL
 );
 `;
 
+// ── settings (key/value; e.g. saved email connection) ─────────
+export function getSetting(key: string): string | null {
+  const r: any = db().prepare("SELECT value FROM settings WHERE key = ?").get(key);
+  return r ? r.value : null;
+}
+
+export function setSetting(key: string, value: string): void {
+  db().prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(key, value);
+}
+
+export function deleteSetting(key: string): void {
+  db().prepare("DELETE FROM settings WHERE key = ?").run(key);
+}
+
 // ── master data ────────────────────────────────────────────────
 export function getVendors(): Vendor[] {
-  return db()
-    .prepare("SELECT * FROM vendors")
-    .all()
-    .map((r: any) => ({ ...r, aliases: JSON.parse(r.aliases_json) }));
+  return db().prepare("SELECT * FROM vendors").all().map((r: any) => ({ ...r, aliases: JSON.parse(r.aliases_json) }));
 }
 
 export function getPOs(): PurchaseOrder[] {
-  return db()
-    .prepare("SELECT * FROM purchase_orders")
-    .all()
-    .map((r: any) => ({ ...r, line_items: JSON.parse(r.line_items_json) }));
+  return db().prepare("SELECT * FROM purchase_orders").all().map((r: any) => ({ ...r, line_items: JSON.parse(r.line_items_json) }));
 }
 
-export function getPO(poNumber: string): PurchaseOrder | null {
-  const r: any = db().prepare("SELECT * FROM purchase_orders WHERE UPPER(po_number)=UPPER(?)").get(poNumber);
-  return r ? { ...r, line_items: JSON.parse(r.line_items_json) } : null;
-}
-
-// ── runs ───────────────────────────────────────────────────────
-export function createRun(id: string, source: string, filename: string): void {
+// ── invoices (processed) ───────────────────────────────────────
+export function createInvoice(id: string, source: string, filename: string, inboxId: string | null): void {
   db()
-    .prepare("INSERT INTO runs (id, source, filename, started_at) VALUES (?,?,?,?)")
-    .run(id, source, filename, new Date().toISOString());
+    .prepare("INSERT INTO invoices (id, source, filename, inbox_id, started_at) VALUES (?,?,?,?,?)")
+    .run(id, source, filename, inboxId, new Date().toISOString());
 }
 
-export function finishRun(runId: string, fields: Record<string, unknown>): void {
+export function finishInvoice(id: string, fields: Record<string, unknown>): void {
   const keys = Object.keys(fields);
   const sets = keys.map((k) => `${k} = ?`).join(", ");
-  db()
-    .prepare(`UPDATE runs SET ${sets}, finished_at = ? WHERE id = ?`)
-    .run(...keys.map((k) => fields[k]), new Date().toISOString(), runId);
+  db().prepare(`UPDATE invoices SET ${sets}, finished_at = ? WHERE id = ?`).run(...keys.map((k) => fields[k]), new Date().toISOString(), id);
 }
 
-export function getRun(runId: string): any {
-  return db().prepare("SELECT * FROM runs WHERE id = ?").get(runId);
+export function getInvoice(id: string): any {
+  return db().prepare("SELECT * FROM invoices WHERE id = ?").get(id);
 }
 
-export function listRuns(): any[] {
-  return db().prepare("SELECT * FROM runs ORDER BY started_at DESC").all();
+export function listInvoices(): any[] {
+  return db().prepare("SELECT * FROM invoices ORDER BY started_at DESC").all();
 }
 
-export function resolveRun(runId: string, resolution: "approved" | "rejected", note: string): void {
-  db()
-    .prepare("UPDATE runs SET resolution=?, resolution_note=?, resolved_at=? WHERE id=?")
-    .run(resolution, note, new Date().toISOString(), runId);
+export function resolveInvoice(id: string, resolution: "approved" | "rejected", note: string): void {
+  db().prepare("UPDATE invoices SET resolution=?, resolution_note=?, resolved_at=? WHERE id=?").run(resolution, note, new Date().toISOString(), id);
 }
 
-// ── stage events ───────────────────────────────────────────────
+// ── audit log ──────────────────────────────────────────────────
 export function saveEvent(e: StageEvent): void {
   db()
-    .prepare(
-      `INSERT INTO stage_events (run_id, stage, name, title, status, summary, details_json, started_at, duration_ms)
-       VALUES (?,?,?,?,?,?,?,?,?)`
-    )
+    .prepare(`INSERT INTO audit_log (invoice_id, stage, name, title, status, summary, details_json, started_at, duration_ms)
+              VALUES (?,?,?,?,?,?,?,?,?)`)
     .run(e.runId, e.stage, e.name, e.title, e.status, e.summary, JSON.stringify(e.details), e.startedAt, e.durationMs);
 }
 
-export function getEvents(runId: string): StageEvent[] {
+export function getEvents(invoiceId: string): StageEvent[] {
   return db()
-    .prepare("SELECT * FROM stage_events WHERE run_id = ? ORDER BY id")
-    .all(runId)
+    .prepare("SELECT * FROM audit_log WHERE invoice_id = ? ORDER BY id")
+    .all(invoiceId)
     .map((r: any) => ({
-      runId: r.run_id, stage: r.stage, name: r.name, title: r.title, status: r.status,
+      runId: r.invoice_id, stage: r.stage, name: r.name, title: r.title, status: r.status,
       summary: r.summary, details: JSON.parse(r.details_json), startedAt: r.started_at, durationMs: r.duration_ms,
     }));
 }
 
 // ── decision-support queries ───────────────────────────────────
-/** Prior processed run with same invoice number + vendor (duplicate check). */
+/** Prior processed invoice with same number + vendor (duplicate check). */
 export function findDuplicate(invoiceNumber: string, vendorKey: string): any {
   return db()
     .prepare(
-      `SELECT * FROM runs
+      `SELECT * FROM invoices
        WHERE UPPER(REPLACE(invoice_number,' ','')) = UPPER(REPLACE(?, ' ', ''))
          AND (vendor_external_id = ? OR UPPER(vendor_name) = UPPER(?))
          AND outcome IS NOT NULL AND outcome != 'HOLD'
@@ -139,7 +157,7 @@ export function findDuplicate(invoiceNumber: string, vendorKey: string): any {
 export function approvedToDate(poNumber: string): { sum: number; count: number } {
   const r: any = db()
     .prepare(
-      `SELECT COALESCE(SUM(amount_basis),0) AS s, COUNT(*) AS c FROM runs
+      `SELECT COALESCE(SUM(amount_basis),0) AS s, COUNT(*) AS c FROM invoices
        WHERE matched_po = ? AND (outcome = 'APPROVE' OR resolution = 'approved')
          AND (reasons_json IS NULL OR reasons_json NOT LIKE '%DUPLICATE%')`
     )
@@ -147,31 +165,76 @@ export function approvedToDate(poNumber: string): { sum: number; count: number }
   return { sum: r.s, count: r.c };
 }
 
-// ── inbox ──────────────────────────────────────────────────────
+// ── extraction cache (SQLite) ──────────────────────────────────
+export function getCached(hash: string): ExtractedInvoice | null {
+  const r: any = db().prepare("SELECT extracted_json FROM extraction_cache WHERE hash = ?").get(hash);
+  return r ? (JSON.parse(r.extracted_json) as ExtractedInvoice) : null;
+}
+
+export function putCached(hash: string, filename: string, extracted: ExtractedInvoice): void {
+  db()
+    .prepare("INSERT OR REPLACE INTO extraction_cache (hash, filename, extracted_json, created_at) VALUES (?,?,?,?)")
+    .run(hash, filename, JSON.stringify(extracted), new Date().toISOString());
+}
+
+// ── inbox (real email, idempotent) ─────────────────────────────
 export function listInbox(): InboxMessage[] {
-  return db().prepare("SELECT * FROM inbox_messages ORDER BY received_at").all() as InboxMessage[];
+  return db()
+    .prepare("SELECT * FROM inbox ORDER BY received_at DESC")
+    .all()
+    .map((r: any) => ({ ...r, attachments: JSON.parse(r.attachments_json) }));
 }
 
 export function getInboxMessage(id: string): InboxMessage | null {
-  return (db().prepare("SELECT * FROM inbox_messages WHERE id = ?").get(id) as InboxMessage) || null;
+  const r: any = db().prepare("SELECT * FROM inbox WHERE id = ?").get(id);
+  return r ? { ...r, attachments: JSON.parse(r.attachments_json) } : null;
 }
 
-export function markProcessed(id: string, runId: string): void {
-  db().prepare("UPDATE inbox_messages SET status='processed', run_id=? WHERE id=?").run(runId, id);
+export function knownInboxIds(): Set<string> {
+  return new Set(db().prepare("SELECT id FROM inbox").all().map((r: any) => r.id));
 }
 
 export function addInboxMessage(m: InboxMessage): void {
   db()
-    .prepare("INSERT INTO inbox_messages (id, from_addr, subject, received_at, attachment, status) VALUES (?,?,?,?,?,?)")
-    .run(m.id, m.from_addr, m.subject, m.received_at, m.attachment, m.status);
+    .prepare("INSERT OR IGNORE INTO inbox (id, from_addr, subject, received_at, attachments_json, status) VALUES (?,?,?,?,?,?)")
+    .run(m.id, m.from_addr, m.subject, m.received_at, JSON.stringify(m.attachments), m.status);
 }
 
-// ── seeding ────────────────────────────────────────────────────
-export function seedAll(dataDir: string): { vendors: number; pos: number; inbox: number } {
+export function markInboxProcessed(id: string): void {
+  db().prepare("UPDATE inbox SET status='processed' WHERE id=?").run(id);
+}
+
+/** Forget all fetched emails + their stored attachments (used when disconnecting an account). */
+export function clearInbox(): void {
+  db().exec("DELETE FROM inbox;");
+  fs.rmSync(mailDir(), { recursive: true, force: true });
+}
+
+// ── attachment bytes on disk (storage/mail/<msgId>/<filename>) ─
+export function saveAttachment(msgId: string, filename: string, bytes: Buffer): void {
+  const dir = path.join(mailDir(), sanitize(msgId));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, sanitize(filename)), bytes);
+}
+
+export function readAttachment(msgId: string, filename: string): Buffer {
+  return fs.readFileSync(path.join(mailDir(), sanitize(msgId), sanitize(filename)));
+}
+
+/** Delete an email's stored attachment bytes once it's been processed (the mail is the archive). */
+export function clearMail(msgId: string): void {
+  fs.rmSync(path.join(mailDir(), sanitize(msgId)), { recursive: true, force: true });
+}
+
+function sanitize(s: string): string {
+  return s.replace(/[^\w.\-]/g, "_");
+}
+
+// ── seeding (masters only — the inbox is real email now) ───────
+export function seedMasters(dataDir: string): { vendors: number; pos: number } {
   const now = new Date().toISOString();
   const vendors = JSON.parse(fs.readFileSync(path.join(dataDir, "vendors.json"), "utf-8")).vendors;
   const pos = JSON.parse(fs.readFileSync(path.join(dataDir, "purchase_orders.json"), "utf-8")).purchase_orders;
-  const inbox = JSON.parse(fs.readFileSync(path.join(dataDir, "inbox.json"), "utf-8")).messages;
   const d = db();
   const vIns = d.prepare(
     "INSERT OR REPLACE INTO vendors (external_id,name,aliases_json,email,email_domain,tax_id,bank_account_last4,status,created_at) VALUES (?,?,?,?,?,?,?,?,?)"
@@ -183,14 +246,9 @@ export function seedAll(dataDir: string): { vendors: number; pos: number; inbox:
   );
   for (const p of pos)
     pIns.run(p.po_number, p.vendor_external_id, p.status, p.currency, p.total_amount, JSON.stringify(p.line_items || []), now);
-  const mIns = d.prepare(
-    "INSERT OR IGNORE INTO inbox_messages (id,from_addr,subject,received_at,attachment,status) VALUES (?,?,?,?,?,?)"
-  );
-  for (const m of inbox) mIns.run(m.id, m.from_addr, m.subject, m.received_at, m.attachment, m.status);
-  return { vendors: vendors.length, pos: pos.length, inbox: inbox.length };
+  return { vendors: vendors.length, pos: pos.length };
 }
 
 export function resetDb(): void {
-  const d = db();
-  d.exec("DELETE FROM runs; DELETE FROM stage_events; DELETE FROM inbox_messages; DELETE FROM vendors; DELETE FROM purchase_orders;");
+  db().exec("DELETE FROM invoices; DELETE FROM audit_log; DELETE FROM inbox; DELETE FROM vendors; DELETE FROM purchase_orders;");
 }

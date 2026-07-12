@@ -1,17 +1,48 @@
-import type { ExtractionProvider } from "../types";
+// Extraction provider selection + automatic fallback chain.
+// EXTRACTION_PROVIDER is comma-separated and tried in order, e.g. "gemini,ollama":
+// when Gemini's daily cap is hit it auto-falls through to Ollama (if running); if
+// nothing succeeds the pipeline turns the failure into a graceful HOLD.
+// The whole chain is wrapped once by the SQLite-backed CachingProvider.
+import type { ExtractHints, ExtractedInvoice, ExtractionProvider } from "../types";
 import { CachingProvider } from "./cache";
 import { GeminiProvider } from "./gemini";
+import { OllamaProvider } from "./ollama";
+
+function build(name: string): ExtractionProvider {
+  switch (name) {
+    case "gemini": return new GeminiProvider();
+    case "ollama": return new OllamaProvider();
+    default: throw new Error(`Unknown extraction provider "${name}". Supported: gemini, ollama`);
+  }
+}
+
+class FallbackChain implements ExtractionProvider {
+  name: string;
+  constructor(private providers: ExtractionProvider[]) {
+    this.name = providers.map((p) => p.name).join(">");
+  }
+  async extract(bytes: Buffer, hints: ExtractHints): Promise<ExtractedInvoice> {
+    let lastErr: unknown = null;
+    for (const p of this.providers) {
+      try { return await p.extract(bytes, hints); }
+      catch (e) { lastErr = e; } // try the next provider (e.g. Gemini capped → Ollama)
+    }
+    throw lastErr instanceof Error ? lastErr : new Error("All extraction providers failed");
+  }
+}
 
 export function getProvider(): ExtractionProvider {
-  const which = (process.env.EXTRACTION_PROVIDER || "gemini").toLowerCase();
-  let base: ExtractionProvider;
-  switch (which) {
-    case "gemini":
-      base = new GeminiProvider();
-      break;
-    // Planned: "ollama" (fully local, zero-API privacy mode), "anthropic"
-    default:
-      throw new Error(`Unknown EXTRACTION_PROVIDER "${which}". Supported: gemini`);
-  }
+  const names = (process.env.EXTRACTION_PROVIDER || "gemini").split(",").map((s) => s.trim()).filter(Boolean);
+  const chain = names.map(build);
+  const base = chain.length === 1 ? chain[0] : new FallbackChain(chain);
   return process.env.EXTRACTION_CACHE === "off" ? base : new CachingProvider(base);
+}
+
+/** Map a filename/extension to the mime type providers expect. */
+export function mimeFor(filename: string): string {
+  const ext = filename.toLowerCase().split(".").pop();
+  if (ext === "png") return "image/png";
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "webp") return "image/webp";
+  return "application/pdf";
 }

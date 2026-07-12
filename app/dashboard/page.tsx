@@ -13,7 +13,7 @@ interface Run {
 
 export default function Dashboard() {
   const [runs, setRuns] = useState<Run[]>([]);
-  const refresh = () => fetch("/api/runs").then((r) => r.json()).then((j) => setRuns(j.runs));
+  const refresh = () => fetch("/api/invoices").then((r) => r.json()).then((j) => setRuns(j.invoices));
   useEffect(() => { refresh(); }, []);
 
   async function resolve(run: Run, resolution: "approved" | "rejected") {
@@ -21,7 +21,7 @@ export default function Dashboard() {
       `${resolution === "approved" ? "Approve" : "Reject"} ${run.invoice_number ?? run.filename}?\n\nA note is required (it goes on the audit trail):`
     );
     if (!note) return;
-    await fetch(`/api/runs/${run.id}/resolve`, {
+    await fetch(`/api/invoices/${run.id}/resolve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ resolution, note }),
@@ -70,7 +70,7 @@ export default function Dashboard() {
                 </div>
                 <div style={{ fontSize: 13, color: "var(--text-2)" }}>{r.headline}</div>
               </div>
-              <a href={`/runs/${r.id}`}><button className="ghost">replay</button></a>
+              <a href={`/invoices/${r.id}`}><button className="ghost">replay</button></a>
               <button onClick={() => resolve(r, "approved")}>Approve</button>
               <button onClick={() => resolve(r, "rejected")}>Reject</button>
             </div>
@@ -105,7 +105,7 @@ export default function Dashboard() {
                       <span className="chip resolved" style={{ marginLeft: 6 }}>human: {r.resolution}</span>
                     )}
                   </td>
-                  <td><a href={`/runs/${r.id}`}><button className="ghost">replay →</button></a></td>
+                  <td><a href={`/invoices/${r.id}`}><button className="ghost">replay →</button></a></td>
                 </tr>
               ))}
             </tbody>

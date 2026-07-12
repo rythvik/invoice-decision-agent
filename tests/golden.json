@@ -19,6 +19,8 @@
     { "file": "GEN_split_metro_3.pdf", "expect": "REVIEW", "must_include": ["PO_OVERBILLED"], "priority": "high", "note": "EDGE 3c: cumulative 3960 > 3780 (105% of PO)" },
     { "file": "GEN_fraud_globaltech.pdf", "expect": "REVIEW", "must_include": ["BANK_ACCOUNT_CHANGED", "URGENCY_LANGUAGE"], "security": true, "priority": "high", "note": "EDGE 4: BEC composite — bank change + urgency + lookalike domain" },
     { "file": "GEN_missing_fields.pdf", "expect": "HOLD", "must_include": ["MISSING_CRITICAL_FIELD"], "note": "no invoice number, no total" },
-    { "file": "GEN_not_invoice.pdf", "expect": "HOLD", "must_include": ["NOT_AN_INVOICE"], "note": "a plain business letter" }
+    { "file": "GEN_not_invoice.pdf", "expect": "HOLD", "must_include": ["NOT_AN_INVOICE"], "note": "a plain business letter" },
+    { "file": "GEN_implied_po_argento.pdf", "expect": "APPROVE", "must_include": [], "note": "no PO printed → inferred from vendor+amount (ArgentoHome → PO-0107)" },
+    { "file": "GEN_bundled_datavault.pdf", "expect": "APPROVE", "must_include": [], "note": "bundled single line, tax in total, no explicit subtotal" }
   ]
 }

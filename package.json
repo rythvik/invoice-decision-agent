@@ -9,12 +9,13 @@
     "build": "next build",
     "start": "next start",
     "seed": "tsx scripts/seed.ts",
-    "golden": "tsx scripts/warm_fixtures.ts && tsx scripts/golden.ts",
-    "warm-fixtures": "tsx scripts/warm_fixtures.ts",
+    "golden": "tsx scripts/golden.ts",
     "generate-pdfs": "tsx scripts/generate_pdfs.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0",
+    "imapflow": "^1.0.171",
+    "mailparser": "^3.7.2",
     "next": "^15.3.0",
     "pdf-lib": "^1.17.1",
     "react": "^19.1.0",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
+    "@types/mailparser": "^3.4.5",
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",

@@ -7,8 +7,9 @@ import { loadEnv } from "./env";
 loadEnv();
 process.env.DB_PATH = path.join(process.cwd(), "storage", "golden.db");
 
-import { resetDb, seedAll } from "../lib/db";
+import { resetDb, seedMasters } from "../lib/db";
 import { processInvoice } from "../lib/pipeline";
+import { warmFixtures } from "../tests/fixtures";
 
 interface GoldenCase {
   file: string; expect: string; must_include: string[];
@@ -17,21 +18,23 @@ interface GoldenCase {
 
 async function main() {
   // fresh, isolated DB for the golden world
-  if (fs.existsSync(process.env.DB_PATH!)) fs.rmSync(process.env.DB_PATH!);
+  for (const f of [process.env.DB_PATH!, process.env.DB_PATH! + "-wal", process.env.DB_PATH! + "-shm"])
+    if (fs.existsSync(f)) fs.rmSync(f);
   resetDb();
-  seedAll(path.join(process.cwd(), "data"));
+  seedMasters(path.join(process.cwd(), "data"));
+  warmFixtures(); // fill the extraction_cache so the run uses fixtures, not the API
 
   const golden: { cases: GoldenCase[] } = JSON.parse(
-    fs.readFileSync(path.join(process.cwd(), "data", "golden.json"), "utf-8")
+    fs.readFileSync(path.join(process.cwd(), "tests", "golden.json"), "utf-8")
   );
 
   let pass = 0, fail = 0;
   const rows: string[] = [];
-  const delayMs = Number(process.env.GOLDEN_DELAY_MS ?? 1500); // throttle uncached warm-up passes
+  const delayMs = Number(process.env.GOLDEN_DELAY_MS ?? 0); // fixtures are local → no throttle needed
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   for (const c of golden.cases) {
-    const pdfPath = path.join(process.cwd(), "data", "inbox", c.file);
+    const pdfPath = path.join(process.cwd(), "tests", "sample_invoices", c.file);
     if (!fs.existsSync(pdfPath)) {
       rows.push(`✗ ${c.file} — MISSING FILE`);
       fail++;

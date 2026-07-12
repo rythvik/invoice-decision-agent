@@ -90,13 +90,12 @@ export interface PurchaseOrder {
 }
 
 export interface InboxMessage {
-  id: string;
+  id: string; // IMAP UID / Message-ID — used for idempotent fetch
   from_addr: string;
   subject: string;
   received_at: string;
-  attachment: string;
+  attachments: string[]; // one email can carry several invoices
   status: "unread" | "processed";
-  run_id?: string | null;
 }
 
 // ── context passed between pipeline stages ──────────────────────
@@ -129,7 +128,27 @@ export interface RunContext {
   checksPassed: number;
 }
 
+export interface ExtractHints {
+  kind: "digital" | "scanned";
+  mime: string; // application/pdf | image/jpeg | image/png
+}
+
 export interface ExtractionProvider {
   name: string;
-  extract(pdf: Buffer, hints: { kind: "digital" | "scanned" }): Promise<ExtractedInvoice>;
+  extract(bytes: Buffer, hints: ExtractHints): Promise<ExtractedInvoice>;
+}
+
+// One fetched email with its invoice attachments, plus the raw bytes accessor.
+export interface FetchedMessage {
+  id: string;
+  from_addr: string;
+  subject: string;
+  received_at: string;
+  attachments: { filename: string; bytes: Buffer }[];
+}
+
+export interface IngestionSource {
+  name: string;
+  /** Pull new messages since the given known ids; implementations skip already-seen ids. */
+  fetchNew(knownIds: Set<string>): Promise<FetchedMessage[]>;
 }

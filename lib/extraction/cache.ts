@@ -1,16 +1,10 @@
-// CachingProvider — content-addressed extraction cache.
-// Extraction is the only paid/limited call and is effectively deterministic
-// (temperature 0), so we cache by PDF hash. Each unique invoice is extracted
-// once, ever; rule-tuning and golden re-runs then cost zero API calls.
-//
-// Fresh uploads (new content) always miss the cache → a genuine live call.
-// Disable with EXTRACTION_CACHE=off.
+// CachingProvider — content-addressed extraction cache, stored in SQLite
+// (extraction_cache table) so every unique document is read at most once and the
+// cache is browsable alongside the rest of the data. Fresh files (new bytes) miss
+// the cache → a genuine live call. Disable with EXTRACTION_CACHE=off.
 import crypto from "crypto";
-import fs from "fs";
-import path from "path";
-import type { ExtractedInvoice, ExtractionProvider } from "../types";
-
-const CACHE_DIR = path.join(process.cwd(), "data", ".extraction_cache");
+import { getCached, putCached } from "../db";
+import type { ExtractHints, ExtractedInvoice, ExtractionProvider } from "../types";
 
 export class CachingProvider implements ExtractionProvider {
   name: string;
@@ -18,15 +12,12 @@ export class CachingProvider implements ExtractionProvider {
     this.name = `cached:${inner.name}`;
   }
 
-  async extract(pdf: Buffer, hints: { kind: "digital" | "scanned" }): Promise<ExtractedInvoice> {
-    const hash = crypto.createHash("sha256").update(pdf).digest("hex").slice(0, 16);
-    const file = path.join(CACHE_DIR, `${hash}.json`);
-    if (fs.existsSync(file)) {
-      try { return JSON.parse(fs.readFileSync(file, "utf-8")) as ExtractedInvoice; } catch { /* fall through */ }
-    }
-    const result = await this.inner.extract(pdf, hints);
-    fs.mkdirSync(CACHE_DIR, { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(result, null, 2));
+  async extract(bytes: Buffer, hints: ExtractHints): Promise<ExtractedInvoice> {
+    const hash = crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 16);
+    const hit = getCached(hash);
+    if (hit) return hit;
+    const result = await this.inner.extract(bytes, hints);
+    putCached(hash, hints.mime, result);
     return result;
   }
 }

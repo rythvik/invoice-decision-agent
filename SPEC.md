@@ -109,6 +109,7 @@ Severity aggregation: **HOLD > REVIEW > APPROVE.** `security=true` if any fraud 
 | Code | Trigger | Message template |
 |---|---|---|
 | LOW_CONFIDENCE_FIELD | any other critical field "low" | "Some fields were hard to read: {fields} — worth a human glance." |
+| MISSING_DATE | invoice_date is null | "The invoice has no date — worth a human glance before paying." |
 | UNKNOWN_VENDOR | no vendor-master match (exact→alias→fuzzy ≥0.85) | "{vendor} isn't in the approved vendor list." |
 | VENDOR_INACTIVE | matched vendor status ≠ active | "{vendor} is marked inactive — they shouldn't be billing us." |
 | PO_NOT_FOUND | explicit PO ref not in register, and no implied match | "PO {ref} isn't in our purchase order register." / "No PO reference found and none could be inferred." |
@@ -160,18 +161,20 @@ and the extraction prompt. Stages 4–8 are deterministic code. LLM is used **on
 ## 7. Pluggable interfaces
 
 ```ts
-interface ExtractionProvider {                    // env: EXTRACTION_PROVIDER
+interface ExtractionProvider {                    // env: EXTRACTION_PROVIDER (comma-sep chain)
   name: string;
-  extract(pdf: Buffer, hints: { kind: "digital"|"scanned" }): Promise<ExtractedInvoice>;
+  extract(bytes: Buffer, hints: { kind: "digital"|"scanned"; mime: string }): Promise<ExtractedInvoice>;
 }
-// v1: GeminiProvider (gemini-2.5-flash, REST, PDF as inline base64, JSON response)
-// later: OllamaProvider (qwen2.5-vl), AnthropicProvider
+// GeminiProvider (multi-model, REST, PDF/image as inline base64) + OllamaProvider (local qwen2.5vl).
+// "gemini,ollama" = cloud first, auto-fall to local on the daily cap. CachingProvider wraps the chain.
+// Input can be PDF or image (JPG/PNG) — mime is derived from the filename.
 
 interface IngestionSource {                       // env: INGESTION_SOURCE
-  listMessages(): Promise<InboxMessage[]>;
-  getAttachment(id: string): Promise<Buffer>;
+  fetchNew(knownIds: Set<string>): Promise<FetchedMessage[]>;
 }
-// v1: LocalInboxSource (data/inbox.json + data/inbox/*.pdf)  · later: ImapSource
+// ImapSource — real mailbox via app password (IMAP_*). Idempotent: knownIds skip already-seen
+// emails so the same invoice is never re-scraped. One email may carry several attachments →
+// several invoices, processed sequentially (a duplicate later in the email is caught).
 ```
 
 ## 8. Storage (SQLite)

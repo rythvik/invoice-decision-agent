@@ -65,6 +65,14 @@ export function runRules(opts: {
     );
   }
 
+  // MISSING_DATE — evaluable, but a dated invoice is expected
+  results.push(
+    inv.invoice_date == null
+      ? fired("MISSING_DATE", "Invoice is dated", "business", "REVIEW",
+          "The invoice has no date — worth a human glance before paying.", {})
+      : passed("MISSING_DATE", "Invoice is dated")
+  );
+
   // UNKNOWN_VENDOR
   results.push(
     !vendor

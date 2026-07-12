@@ -4,6 +4,10 @@
 // is verified separately (demo + a real golden pass when quota is available).
 //
 // Values mirror what each invoice actually prints (reference manifest + our generator).
+import crypto from "crypto";
+import fs from "fs";
+import path from "path";
+import { putCached } from "../lib/db";
 import type { ExtractedInvoice } from "../lib/types";
 
 const HIGH = { vendor_name: "high", invoice_number: "high", total: "high", po_reference: "high" } as const;
@@ -137,4 +141,32 @@ export const FIXTURES: Record<string, ExtractedInvoice> = {
     is_invoice: false, vendor_name: null, invoice_number: null, total: null,
     field_confidence: {}, notes: "A building-management notice about parking garage closure.",
   }),
+  // Implied PO: no PO printed; vendor ArgentoHome has one open PO (0107, 253.66) → inferred
+  "GEN_implied_po_argento.pdf": inv({
+    vendor_name: "ArgentoHome", vendor_email: "billing@argentohome.com",
+    invoice_number: "AH-2026-0031", po_reference: null,
+    subtotal: 253.66, tax: 0, total: 253.66,
+    line_items: [li("Home Furnishing Items", 1, 253.66, 253.66)],
+  }),
+  // Bundled single line, tax folded into total, no explicit subtotal (DataVault, 800 vs PO-0104)
+  "GEN_bundled_datavault.pdf": inv({
+    vendor_name: "DataVault Cloud Services", vendor_email: "billing@datavault.cloud",
+    invoice_number: "DV-2026-1180", po_reference: "PO-2026-0104",
+    subtotal: null, tax: 66, total: 866,
+    line_items: [li("Cloud services — August (bundled)", 1, 800, 800)],
+  }),
 };
+
+/** Write every fixture into the SQLite extraction cache (hash = sha256(pdf).slice(0,16)). */
+export function warmFixtures(): number {
+  const dir = path.join(process.cwd(), "tests", "sample_invoices");
+  let n = 0;
+  for (const [file, extracted] of Object.entries(FIXTURES)) {
+    const p = path.join(dir, file);
+    if (!fs.existsSync(p)) { console.warn("  ! missing PDF:", file); continue; }
+    const hash = crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex").slice(0, 16);
+    putCached(hash, file, extracted);
+    n++;
+  }
+  return n;
+}

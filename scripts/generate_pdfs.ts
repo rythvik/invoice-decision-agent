@@ -1,4 +1,4 @@
-// Generates the 6 GEN_* test PDFs (SPEC §9) into data/inbox/.
+// Generates the GEN_* test PDFs (SPEC §9) into data/sample_invoices/.
 // GEN_scanned_acme is rasterized to an image-only PDF (true "scanned" document).
 import { execSync } from "child_process";
 import fs from "fs";
@@ -6,7 +6,7 @@ import os from "os";
 import path from "path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
-const OUT = path.join(process.cwd(), "data", "inbox");
+const OUT = path.join(process.cwd(), "tests", "sample_invoices");
 
 interface Line { desc: string; qty: string; unit: string; amount: string }
 interface InvoiceSpec {
@@ -176,6 +176,32 @@ async function main() {
     });
     fs.writeFileSync(path.join(OUT, "GEN_missing_fields.pdf"), bytes);
     console.log("wrote GEN_missing_fields.pdf");
+  }
+
+  // ── implied PO: no PO number printed (inferred from vendor + amount) ──
+  {
+    const bytes = await drawInvoice({
+      file: "GEN_implied_po_argento.pdf",
+      vendor: "ArgentoHome", vendorAddr: "77 Design Blvd, Portland, OR", vendorEmail: "billing@argentohome.com",
+      invNo: "AH-2026-0031", date: "2026-07-09", due: "2026-08-08", po: null,
+      lines: [{ desc: "Home Furnishing Items", qty: "1", unit: "253.66", amount: "253.66" }],
+      subtotal: "253.66", tax: "0.00", total: "253.66", terms: "Net 30",
+    });
+    fs.writeFileSync(path.join(OUT, "GEN_implied_po_argento.pdf"), bytes);
+    console.log("wrote GEN_implied_po_argento.pdf");
+  }
+
+  // ── bundled single line, tax folded into total, no explicit subtotal ──
+  {
+    const bytes = await drawInvoice({
+      file: "GEN_bundled_datavault.pdf",
+      vendor: "DataVault Cloud Services", vendorAddr: "1 Cloud Way, Seattle, WA", vendorEmail: "billing@datavault.cloud",
+      invNo: "DV-2026-1180", date: "2026-08-01", due: "2026-08-31", po: "PO-2026-0104",
+      lines: [{ desc: "Cloud services — August (all-inclusive)", qty: "1", unit: "", amount: "800.00" }],
+      subtotal: null, tax: "66.00", total: "866.00", terms: "Net 30",
+    });
+    fs.writeFileSync(path.join(OUT, "GEN_bundled_datavault.pdf"), bytes);
+    console.log("wrote GEN_bundled_datavault.pdf");
   }
 
   // ── not an invoice: building-management letter ──

@@ -81,9 +81,14 @@ export function DecisionCard({ d }: { d: UiDecision }) {
   );
 }
 
-export function StageList({ events, decision, running }: { events: UiStageEvent[]; decision: UiDecision | null; running: boolean }) {
+export function StageList({ events, decision, running, title }: { events: UiStageEvent[]; decision: UiDecision | null; running: boolean; title?: string }) {
   return (
     <div className="card">
+      {title && (
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+          <i>📄</i> <code style={{ fontSize: 13 }}>{title}</code>
+        </div>
+      )}
       {events.map((ev, i) => (
         <StageRow key={`${ev.stage}-${i}`} ev={ev} />
       ))}

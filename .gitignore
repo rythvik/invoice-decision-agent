@@ -1,9 +1,6 @@
 node_modules/
 .next/
-storage/*.db
-storage/*.db-journal
-data/.extraction_cache/
-data/inbox/UP_*.pdf
+storage/
 .env.local
 .env
 *.tsbuildinfo
