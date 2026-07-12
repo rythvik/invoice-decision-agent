@@ -26,7 +26,10 @@ class FallbackChain implements ExtractionProvider {
     let lastErr: unknown = null;
     for (const p of this.providers) {
       try { return await p.extract(bytes, hints); }
-      catch (e) { lastErr = e; } // try the next provider (e.g. Gemini capped → Ollama)
+      catch (e) {
+        console.warn(`[extraction] ${p.name} failed: ${e instanceof Error ? e.message : e}`);
+        lastErr = e; // try the next provider (e.g. Gemini capped → Ollama)
+      }
     }
     throw lastErr instanceof Error ? lastErr : new Error("All extraction providers failed");
   }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
+import SessionCleanup from "./SessionCleanup";
 
 export const metadata: Metadata = {
   title: "Invoice Decision Agent",
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
           {children}
         </div>
+        <SessionCleanup />
       </body>
     </html>
   );

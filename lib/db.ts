@@ -234,6 +234,22 @@ export function clearEmailData(): void {
   fs.rmSync(mailDir(), { recursive: true, force: true });
 }
 
+/**
+ * Wipe every run this visitor produced — invoices, their audit trail, fetched
+ * emails, and the extraction cache — while keeping the vendor + PO masters intact.
+ * Called when the browser tab/app closes (via navigator.sendBeacon) so a shared
+ * deployment never carries one visitor's company data into the next visitor's session.
+ */
+export function clearAllRunData(): void {
+  db().exec(`
+    DELETE FROM audit_log;
+    DELETE FROM invoices;
+    DELETE FROM inbox;
+    DELETE FROM extraction_cache;
+  `);
+  fs.rmSync(mailDir(), { recursive: true, force: true });
+}
+
 // ── attachment bytes on disk (storage/mail/<msgId>/<filename>) ─
 export function saveAttachment(msgId: string, filename: string, bytes: Buffer): void {
   const dir = path.join(mailDir(), sanitize(msgId));
