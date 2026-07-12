@@ -86,18 +86,19 @@ export class OcrSpaceProvider implements ExtractionProvider {
       if (dateMatches[1]) inv.due_date = dateMatches[1];
     }
 
-    // Total — try different patterns: "TOTAL DUE", "Total", "Amount Due" (handles line breaks)
-    let totalMatch = text.match(/(?:TOTAL|Amount)\s+DUE[\s\n]*[\$€₹]?\s*([\d,]+\.?\d*)/i);
-    if (!totalMatch) totalMatch = text.match(/(?:^|\n)(?:Total|Grand\s+Total)[:\s]+[\$€₹]?\s*([\d,]+(?:\.\d{1,2})?)/mi);
-    if (!totalMatch) totalMatch = text.match(/(?:^|\n)Amount\s+Due[\s\n:]*[\$€₹]?\s*([\d,]+(?:\.\d{1,2})?)/mi);
+    // Total — extract using multiple patterns, with fallback to highest amount
+    let totalMatch = text.match(/(?:TOTAL|Amount)\s+(?:DUE|Due)[\s\n]*[\$€₹]?\s*([\d,]+\.?\d*)/i);
+    if (!totalMatch) totalMatch = text.match(/(?:^|\n)(?:Total|Grand\s+Total|Amount\s+Due)[:\s]+[\$€₹]?\s*([\d,]+(?:\.\d{1,2})?)/mi);
 
-    if (totalMatch) {
+    if (totalMatch && totalMatch[1]) {
       inv.total = parseFloat(totalMatch[1].replace(/,/g, ""));
     } else {
-      // Fallback: look for highest amount (handles both $4600 and $4600.50 formats)
-      const amounts = text.match(/[\$€₹]?\s*([\d,]+(?:\.\d{1,2})?)/g);
-      if (amounts && amounts.length > 0) {
-        inv.total = parseFloat(amounts[amounts.length - 1].replace(/[\$€₹\s,]/g, ""));
+      // Fallback: find all currency amounts and use the highest/last one
+      const allAmounts = text.match(/[\$€₹]\s*(\d+(?:[,\s]\d{3})*(?:\.\d{1,2})?)/g);
+      if (allAmounts && allAmounts.length > 0) {
+        const lastAmount = allAmounts[allAmounts.length - 1];
+        const numericPart = lastAmount.replace(/[\$€₹\s,]/g, "");
+        inv.total = parseFloat(numericPart);
       }
     }
 
