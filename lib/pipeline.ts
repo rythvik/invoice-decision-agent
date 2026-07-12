@@ -202,6 +202,31 @@ export async function* processInvoice(bytes: Buffer, filename: string, source: s
   t = now();
   const results = runRules({ inv, vendorMatch, poMatch, amountBasis, validateChecks });
   const firedResults = results.filter((r) => !r.passed);
+
+  // Emit substages for vendor, PO, and security checks (for visibility)
+  const vendorChecks = results.filter((r) => /VENDOR|TAX_ID|REMIT_TO/.test(r.code));
+  const poChecks = results.filter((r) => /PO_|AMOUNT_/.test(r.code));
+  const bankChecks = results.filter((r) => /BANK/.test(r.code));
+  const securityChecks = results.filter((r) => /LOOKALIKE|URGENCY|ROUND_AMOUNT|DORMANT/.test(r.code));
+
+  const vendorPassed = vendorChecks.filter((r) => r.passed).length;
+  const poPassed = poChecks.filter((r) => r.passed).length;
+  const bankPassed = bankChecks.filter((r) => r.passed).length;
+  const securityPassed = securityChecks.filter((r) => r.passed).length;
+
+  if (vendorChecks.length > 0) {
+    yield emit("rules", `👤 Vendor Verification`, vendorPassed === vendorChecks.length ? "done" : "warning",
+      `${vendorPassed} of ${vendorChecks.length} passed`, { checks: vendorChecks }, t);
+  }
+  if (poChecks.length > 0) {
+    yield emit("rules", `📦 PO Verification`, poPassed === poChecks.length ? "done" : "warning",
+      `${poPassed} of ${poChecks.length} passed`, { checks: poChecks }, t);
+  }
+  if (bankChecks.length > 0) {
+    yield emit("rules", `🏦 Bank Verification`, bankPassed === bankChecks.length ? "done" : "warning",
+      `${bankPassed} of ${bankChecks.length} passed`, { checks: bankChecks }, t);
+  }
+
   yield emit("rules", `Ran the ${results.length} checks`,
     firedResults.length ? "warning" : "done",
     firedResults.length
@@ -275,22 +300,31 @@ function buildDecision(
 }
 
 function persistDecision(runId: string, d: Decision, inv: ExtractedInvoice | null, vendorExt: string | null, amountBasis: number | null): void {
-  finishInvoice(runId, {
-    outcome: d.outcome,
-    priority: d.priority,
-    security: d.security ? 1 : 0,
-    headline: d.headline,
-    reasons_json: JSON.stringify(d.reasons),
-    checks_json: JSON.stringify(d.checks),
-    matched_po: d.matchedPo,
-    invoice_number: inv?.invoice_number ?? null,
-    vendor_external_id: vendorExt,
-    vendor_name: inv?.vendor_name ?? null,
-    currency: inv?.currency ?? null,
-    amount_basis: amountBasis,
-    total: inv?.total ?? null,
-    extracted_json: inv ? JSON.stringify(inv) : null,
-    checks_passed: d.checksPassed,
-    checks_total: d.checksTotal,
-  });
+  try {
+    finishInvoice(runId, {
+      outcome: d.outcome,
+      priority: d.priority,
+      security: d.security ? 1 : 0,
+      headline: d.headline,
+      reasons_json: JSON.stringify(d.reasons),
+      checks_json: JSON.stringify(d.checks),
+      matched_po: d.matchedPo,
+      invoice_number: inv?.invoice_number ?? null,
+      vendor_external_id: vendorExt,
+      vendor_name: inv?.vendor_name ?? null,
+      currency: inv?.currency ?? null,
+      amount_basis: amountBasis,
+      total: inv?.total ?? null,
+      extracted_json: inv ? JSON.stringify(inv) : null,
+      checks_passed: d.checksPassed,
+      checks_total: d.checksTotal,
+    });
+    // Force WAL data to main database file (prevents data loss on crash)
+    const db = require("./db").db() as any;
+    db.pragma("wal_checkpoint(RESTART)");
+    console.log(`✓ Persisted invoice ${runId}`);
+  } catch (e: any) {
+    console.error(`✗ Failed to persist invoice ${runId}:`, e.message);
+    throw e;
+  }
 }

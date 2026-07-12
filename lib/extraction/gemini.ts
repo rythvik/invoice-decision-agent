@@ -83,6 +83,10 @@ export class GeminiProvider implements ExtractionProvider {
         err.perDay = /PerDay/i.test(text);
         const m = text.match(/retry in ([\d.]+)s|"retryDelay":\s*"(\d+)s"/i);
         if (m) err.retryMs = Math.ceil(parseFloat(m[1] || m[2]) * 1000);
+      } else if (res.status === 400 && /no longer available|deprecated|not found/i.test(text)) {
+        err.perDay = true; // Model deprecated → try next model
+      } else if (res.status === 404 || res.status === 503 || res.status === 504) {
+        err.perDay = true; // Server error or not found → try next model
       }
       throw err;
     }
