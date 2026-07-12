@@ -1,20 +1,19 @@
 // Extraction provider selection + automatic fallback chain.
-// EXTRACTION_PROVIDER is comma-separated and tried in order, e.g. "vision,ollama":
-// when Vision API fails it auto-falls through to Ollama (if running); if
-// nothing succeeds the pipeline turns the failure into a graceful HOLD.
+// EXTRACTION_PROVIDER is comma-separated and tried in order, e.g. "ocrspace,ollama,gemini":
+// when ocrspace fails it auto-falls through to Ollama (if running), then Gemini.
 // The whole chain is wrapped once by the SQLite-backed CachingProvider.
 import type { ExtractHints, ExtractedInvoice, ExtractionProvider } from "../types";
 import { CachingProvider } from "./cache";
 import { GeminiProvider } from "./gemini";
 import { OllamaProvider } from "./ollama";
-import { VisionExtractor } from "./vision";
+import { OcrSpaceProvider } from "./ocrspace";
 
 function build(name: string): ExtractionProvider {
   switch (name) {
+    case "ocrspace": return new OcrSpaceProvider();
     case "gemini": return new GeminiProvider();
     case "ollama": return new OllamaProvider();
-    case "vision": return new VisionExtractor(process.env.GOOGLE_APPLICATION_CREDENTIALS || "./credentials-vision.json");
-    default: throw new Error(`Unknown extraction provider "${name}". Supported: vision, gemini, ollama`);
+    default: throw new Error(`Unknown extraction provider "${name}". Supported: ocrspace, gemini, ollama`);
   }
 }
 
