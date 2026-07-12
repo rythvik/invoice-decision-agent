@@ -1,18 +1,20 @@
 // Extraction provider selection + automatic fallback chain.
-// EXTRACTION_PROVIDER is comma-separated and tried in order, e.g. "gemini,ollama":
-// when Gemini's daily cap is hit it auto-falls through to Ollama (if running); if
+// EXTRACTION_PROVIDER is comma-separated and tried in order, e.g. "vision,ollama":
+// when Vision API fails it auto-falls through to Ollama (if running); if
 // nothing succeeds the pipeline turns the failure into a graceful HOLD.
 // The whole chain is wrapped once by the SQLite-backed CachingProvider.
 import type { ExtractHints, ExtractedInvoice, ExtractionProvider } from "../types";
 import { CachingProvider } from "./cache";
 import { GeminiProvider } from "./gemini";
 import { OllamaProvider } from "./ollama";
+import { VisionExtractor } from "./vision";
 
 function build(name: string): ExtractionProvider {
   switch (name) {
     case "gemini": return new GeminiProvider();
     case "ollama": return new OllamaProvider();
-    default: throw new Error(`Unknown extraction provider "${name}". Supported: gemini, ollama`);
+    case "vision": return new VisionExtractor(process.env.GOOGLE_APPLICATION_CREDENTIALS || "./credentials-vision.json");
+    default: throw new Error(`Unknown extraction provider "${name}". Supported: vision, gemini, ollama`);
   }
 }
 
@@ -32,7 +34,7 @@ class FallbackChain implements ExtractionProvider {
 }
 
 export function getProvider(): ExtractionProvider {
-  const names = (process.env.EXTRACTION_PROVIDER || "gemini").split(",").map((s) => s.trim()).filter(Boolean);
+  const names = (process.env.EXTRACTION_PROVIDER || "vision").split(",").map((s) => s.trim()).filter(Boolean);
   const chain = names.map(build);
   const base = chain.length === 1 ? chain[0] : new FallbackChain(chain);
   return process.env.EXTRACTION_CACHE === "off" ? base : new CachingProvider(base);
