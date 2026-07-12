@@ -82,6 +82,7 @@ const OUTCOME_LABEL: Record<UiDecision["outcome"], string> = {
 };
 
 export function DecisionCard({ d }: { d: UiDecision }) {
+  const [reasonsOpen, setReasonsOpen] = useState(false);
   const cls = `decision ${d.outcome}${d.security ? " security" : ""}`;
   const checklist = buildChecklist(d);
   return (
@@ -89,9 +90,8 @@ export function DecisionCard({ d }: { d: UiDecision }) {
       <div>
         <span className={`badge ${d.outcome}`}>{OUTCOME_LABEL[d.outcome]}</span>
         {d.security && <span className="badge security">🛡 SECURITY — DO NOT PAY UNTIL VERIFIED</span>}
-        {d.priority === "high" && !d.security && <span className="badge high">HIGH PRIORITY</span>}
       </div>
-      <div className="headline">{d.headline}</div>
+      <h3 className="headline">{d.headline}</h3>
       {checklist.length > 0 && (
         <div className="checklist">
           {checklist.map((c) => (
@@ -102,18 +102,21 @@ export function DecisionCard({ d }: { d: UiDecision }) {
         </div>
       )}
       {d.reasons.length > 0 && (
-        <ul>
-          {d.reasons.map((r) => (
-            <li key={r.code}>
-              <strong>{r.code.replaceAll("_", " ").toLowerCase()}</strong> — {r.message}
-            </li>
-          ))}
-        </ul>
+        <>
+          <button className="expand-toggle" onClick={() => setReasonsOpen(!reasonsOpen)}>
+            {reasonsOpen ? "▾ hide reasons" : "▸ view reasons"}
+          </button>
+          {reasonsOpen && (
+            <ul className="reasons">
+              {d.reasons.map((r) => (
+                <li key={r.code}>
+                  <strong>{r.code.replaceAll("_", " ").toLowerCase()}</strong> — {r.message}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
-      <div className="checks">
-        {d.checksPassed} of {d.checksTotal} checks passed
-        {d.matchedPo ? ` · matched ${d.matchedPo}` : ""}
-      </div>
     </div>
   );
 }

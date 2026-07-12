@@ -13,6 +13,7 @@ interface Run {
 
 export default function Dashboard() {
   const [runs, setRuns] = useState<Run[]>([]);
+  const [rerunning, setRerunning] = useState<string | null>(null);
   const refresh = () => fetch("/api/invoices").then((r) => r.json()).then((j) => setRuns(j.invoices));
   useEffect(() => { refresh(); }, []);
 
@@ -27,6 +28,36 @@ export default function Dashboard() {
       body: JSON.stringify({ resolution, note }),
     });
     refresh();
+  }
+
+  async function rerun(run: Run) {
+    setRerunning(run.id);
+    try {
+      const res = await fetch(`/api/invoices/${run.id}/rerun`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Re-run failed: ${err.error || res.statusText}`);
+        return;
+      }
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop()!;
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const obj = JSON.parse(line);
+          if (obj.type === "done" || obj.type === "error") break;
+        }
+      }
+      refresh();
+    } finally {
+      setRerunning(null);
+    }
   }
 
   const counts = {
@@ -116,7 +147,7 @@ export default function Dashboard() {
         ) : (
           <table>
             <thead>
-              <tr><th>When</th><th>Invoice</th><th>Vendor</th><th>Amount</th><th>PO</th><th>Decision</th><th></th></tr>
+              <tr><th>When</th><th>Invoice</th><th>Vendor</th><th>Amount</th><th>PO</th><th>Decision</th><th style={{ textAlign: "right" }}>Actions</th></tr>
             </thead>
             <tbody>
               {runs.map((r) => (
@@ -136,7 +167,12 @@ export default function Dashboard() {
                       <span className="chip resolved" style={{ marginLeft: 6 }}>human: {r.resolution}</span>
                     )}
                   </td>
-                  <td><a href={`/invoices/${r.id}`}><button className="ghost">replay →</button></a></td>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    <button className="ghost" onClick={() => rerun(r)} disabled={rerunning === r.id} style={{ marginRight: 8 }}>
+                      {rerunning === r.id ? "⟳" : "↻"}
+                    </button>
+                    <a href={`/invoices/${r.id}`}><button className="ghost">→</button></a>
+                  </td>
                 </tr>
               ))}
             </tbody>

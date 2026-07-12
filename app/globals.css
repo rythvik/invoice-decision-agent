@@ -152,9 +152,9 @@ button:disabled { opacity: 0.4; cursor: default; }
 
 /* ── decision card ─────────────────────────────────── */
 .decision {
-  position: relative; border-radius: var(--radius); padding: 18px 20px 18px 22px;
+  position: relative; border-radius: var(--radius); padding: 14px 16px;
   margin-top: 18px; border: 1px solid; overflow: hidden;
-  animation: fadein 0.4s ease both;
+  animation: fadein 0.4s ease both; display: flex; flex-direction: column; gap: 10px;
 }
 .decision::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
 .decision.APPROVE { background: var(--green-bg); border-color: var(--green-line); }
@@ -177,14 +177,18 @@ button:disabled { opacity: 0.4; cursor: default; }
 .badge.REJECT { background: var(--red); color: #fff; }
 .badge.HOLD { background: var(--text-3); color: #fff; }
 .badge.security { background: var(--red); color: #fff; }
-.badge.high { background: transparent; color: var(--red); border: 1px solid var(--red); }
 
-.decision .headline { font-size: 15px; font-weight: 620; margin: 11px 0 6px; letter-spacing: -0.1px; }
-.decision ul { margin: 8px 0 0 18px; }
-.decision li { font-size: 13.5px; color: var(--text-2); margin-bottom: 5px; }
-.decision .checks { font-size: 12.5px; color: var(--text-3); margin-top: 12px; }
+.decision h3.headline { font-size: 16px; font-weight: 700; margin: 0 0 8px 0; letter-spacing: -0.1px; }
+.decision .reasons { margin: 0 0 0 18px; padding: 0; }
+.decision .reasons li { font-size: 13.5px; color: var(--text-2); margin-bottom: 5px; }
 
-.checklist { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 10px; }
+.expand-toggle {
+  font-size: 11px; color: var(--text-2); background: transparent; border: none; padding: 0;
+  cursor: pointer; text-decoration: underline; margin-top: 4px; transition: color 0.15s;
+}
+.expand-toggle:hover { color: var(--blue); }
+
+.checklist { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 0; }
 .checklist-item { font-size: 12.5px; font-weight: 600; padding: 2px 9px; border-radius: 6px; }
 .checklist-item.pass { background: var(--green-bg); color: var(--green); }
 .checklist-item.fail { background: var(--red-bg); color: var(--red); }
