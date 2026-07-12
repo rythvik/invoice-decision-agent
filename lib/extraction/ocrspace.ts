@@ -58,9 +58,9 @@ export class OcrSpaceProvider implements ExtractionProvider {
       notes: null,
     };
 
-    // Invoice number — look for # prefix or standalone pattern like ACM-2026-0451
-    let invMatch = text.match(/#\s*([A-Za-z0-9\-\.\/]+)/i);
-    if (!invMatch) invMatch = text.match(/(?:Invoice\s*[:#])\s*([A-Za-z0-9\-\.\/]+)/i);
+    // Invoice number — look for patterns like "Invoice #: INV-123", "#INV-123", "Invoice Date:" rarely has # so exclude that line
+    let invMatch = text.match(/(?:^|\n)Invoice\s*#?:\s*([A-Za-z0-9\-\.\/]+)/mi);
+    if (!invMatch) invMatch = text.match(/(?:^|\n)#\s*([A-Za-z0-9\-\.\/]+)/mi);
     if (invMatch) inv.invoice_number = invMatch[1];
 
     // PO number — look for "PO Number:" or "PO:" followed by PO-XXXX pattern
@@ -84,10 +84,10 @@ export class OcrSpaceProvider implements ExtractionProvider {
       if (dateMatches[1]) inv.due_date = dateMatches[1];
     }
 
-    // Total — try different patterns, including across line breaks
-    let totalMatch = text.match(/TOTAL\s+DUE[\s\n]*[\$€₹]?\s*([\d,]+\.?\d*)/i);
-    if (!totalMatch) totalMatch = text.match(/(?:^|\n)Total\s+(?:[A-Z]{3})?\s+[\$€₹]?\s*([\d,]+(?:\.\d{1,2})?)/mi);
+    // Total — try different patterns: "TOTAL DUE", "Total", "Amount Due" (possibly with line breaks)
+    let totalMatch = text.match(/(?:TOTAL|Amount)\s+DUE[\s\n]*[\$€₹]?\s*([\d,]+\.?\d*)/i);
     if (!totalMatch) totalMatch = text.match(/(?:^|\n)(?:Total|Grand\s+Total)[:\s]+[\$€₹]?\s*([\d,]+(?:\.\d{1,2})?)/mi);
+    if (!totalMatch) totalMatch = text.match(/(?:^|\n)Amount\s+Due[\s\n:]*[\$€₹]?\s*([\d,]+(?:\.\d{1,2})?)/mi);
     // Fallback: look for highest amount (handles both $4600 and $4600.50 formats)
     if (!totalMatch) {
       const amounts = text.match(/[\$€₹]?\s*([\d,]+(?:\.\d{1,2})?)/g);
