@@ -6,6 +6,10 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   ensureSeeded();
-  const invoices = listInvoices().map((r: any) => ({ ...r, reasons: r.reasons_json ? JSON.parse(r.reasons_json) : [] }));
+  const invoices = listInvoices().map((r: any) => ({
+    ...r,
+    reasons: r.reasons_json ? JSON.parse(r.reasons_json) : [],
+    checks: r.checks_json ? JSON.parse(r.checks_json) : [],
+  }));
   return Response.json({ invoices });
 }

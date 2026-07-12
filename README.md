@@ -6,14 +6,15 @@ An AP clerk opens each vendor invoice, finds the matching purchase order, checks
 numbers, and decides what to do — hundreds of times a month. It's slow, and a tired
 person on a Friday afternoon makes expensive mistakes. This agent does that work:
 it reads invoices straight from your email, validates them, matches them to a PO, runs the
-checks, and returns **Approve / Review / Hold** — with the reasoning laid bare and a full
-audit trail.
+checks, and returns **Approve / Review / Reject / Hold** — with the reasoning laid bare and
+a full audit trail.
 
 It reads clean PDFs, scanned images, *and* photo/JPG/PNG invoices; catches duplicates;
 spots invoice fraud (BEC bank-change, lookalike domains, urgency pressure); infers a PO when
-none is printed; and tracks split-PO over-billing across invoices. It never auto-rejects —
-the machine clears the clean ones and routes everything judgmental to a human, with the
-homework already done.
+none is printed; and tracks split-PO over-billing across invoices. It decides firmly — the
+machine auto-clears the clean ones and auto-rejects anything decisively wrong, saving a
+human review for the genuinely close calls, with the homework already done. Every decision
+is exportable to a spreadsheet you keep, independent of whether the mailbox stays connected.
 
 > Design principle: **AI reads, rules decide.** A vision model extracts the invoice (the
 > messy part only an LLM can do); a deterministic rule engine makes the call — so every
@@ -92,21 +93,29 @@ view, persisted for the dashboard, and forms the audit trail.
 
 ## The decision model
 
-Three outcomes, all decided autonomously — **the process never hard-rejects.**
+Four outcomes, all decided autonomously. **REJECT is the dominant negative outcome** —
+anything confidently, decisively wrong is auto-rejected. **REVIEW is a small residual
+bucket** for genuinely soft/ambiguous findings only. **HOLD** is reserved for a true
+extraction failure (we couldn't read the document at all).
 
 | Outcome | Meaning |
 |---------|---------|
 | **APPROVE** | Clean: within tolerance, math closes, vendor known, PO matched, not a duplicate |
-| **REVIEW** | Evaluated, needs a human — anything judgmental (fraud signals get a 🛡 security treatment) |
-| **HOLD** | Couldn't evaluate — missing critical fields, math doesn't add up, or not an invoice |
+| **REVIEW** | Evaluated, genuinely ambiguous — a borderline 5–10% overage, currency mismatch, missing date, or a readable-but-incomplete document |
+| **REJECT** | Evaluated, decisively wrong — duplicate, unknown/inactive vendor, no PO, large overage, cumulative over-bill, inconsistent math, or a fraud signal (🛡 security) |
+| **HOLD** | Couldn't evaluate at all — the document itself couldn't be read |
 
-Decision = worst severity fired. `HOLD > REVIEW > APPROVE`. A human resolves REVIEW/HOLD
-items from the dashboard — an action on a *finished* run, never a pause mid-run.
+Decision = worst severity fired. `HOLD > REJECT > REVIEW > APPROVE`. A human can override
+any REJECT/REVIEW/HOLD from the dashboard — a decision made on a *finished* run, never a
+pause mid-run. Auto-rejected invoices get their own dashboard section (already decided,
+override available), separate from the human review queue.
 
-**Rules:** missing fields / math / unreadable / not-an-invoice → HOLD · unknown or inactive
-vendor, PO not found, missing date, currency mismatch, duplicate, amount over 5% / 10%,
-cumulative PO over-bill → REVIEW · bank-account change (BEC), tax-ID / remit-to mismatch,
-lookalike email domain, urgency language, round-amount-no-detail → REVIEW 🛡.
+**Rules:** unreadable document → HOLD · duplicate, unknown/inactive vendor, PO not found,
+PO/vendor mismatch, amount >10% over, cumulative PO over-bill, inconsistent math,
+bank-account change (BEC), tax-ID/remit-to mismatch, lookalike email domain, urgency
+language, round-amount-no-detail → REJECT (fraud signals also flagged 🛡) · amount 5–10%
+over, currency mismatch, missing date, missing critical fields, low-confidence read,
+not-an-invoice, ambiguous PO match → REVIEW.
 
 ## Edge cases handled (deliberately)
 

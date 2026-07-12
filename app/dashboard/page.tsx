@@ -33,10 +33,12 @@ export default function Dashboard() {
     total: runs.length,
     approved: runs.filter((r) => r.outcome === "APPROVE").length,
     review: runs.filter((r) => r.outcome === "REVIEW" && !r.resolution).length,
+    rejected: runs.filter((r) => r.outcome === "REJECT" && !r.resolution).length,
     hold: runs.filter((r) => r.outcome === "HOLD" && !r.resolution).length,
     security: runs.filter((r) => r.security && !r.resolution).length,
   };
   const queue = runs.filter((r) => (r.outcome === "REVIEW" || r.outcome === "HOLD") && !r.resolution);
+  const rejectedQueue = runs.filter((r) => r.outcome === "REJECT" && !r.resolution);
 
   const money = (r: Run) =>
     r.total != null
@@ -45,13 +47,19 @@ export default function Dashboard() {
 
   return (
     <main>
-      <h1>Dashboard</h1>
-      <p className="sub">Every run, its decision, and the queue waiting on a human.</p>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+        <div>
+          <h1>Dashboard</h1>
+          <p className="sub">Every run, its decision, and the queue waiting on a human.</p>
+        </div>
+        <a href="/api/invoices/export"><button className="ghost">Export CSV</button></a>
+      </div>
 
       <div className="card">
         <span className="stat"><div className="n">{counts.total}</div><div className="l">processed</div></span>
         <span className="stat"><div className="n" style={{ color: "var(--green)" }}>{counts.approved}</div><div className="l">auto-approved</div></span>
         <span className="stat"><div className="n" style={{ color: "var(--amber)" }}>{counts.review}</div><div className="l">need review</div></span>
+        <span className="stat"><div className="n" style={{ color: "var(--red)" }}>{counts.rejected}</div><div className="l">auto-rejected</div></span>
         <span className="stat"><div className="n" style={{ color: "var(--text-3)" }}>{counts.hold}</div><div className="l">on hold</div></span>
         <span className="stat"><div className="n" style={{ color: "var(--red)" }}>{counts.security}</div><div className="l">security 🛡</div></span>
       </div>
@@ -73,6 +81,29 @@ export default function Dashboard() {
               <a href={`/invoices/${r.id}`}><button className="ghost">replay</button></a>
               <button onClick={() => resolve(r, "approved")}>Approve</button>
               <button onClick={() => resolve(r, "rejected")}>Reject</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {rejectedQueue.length > 0 && (
+        <div className="card" style={{ borderColor: "var(--red-line)" }}>
+          <h2>Auto-rejected</h2>
+          <p style={{ fontSize: 13, color: "var(--text-2)", marginTop: -6, marginBottom: 10 }}>
+            The process rejected these on its own — no human action needed. Override below if one looks wrong.
+          </p>
+          {rejectedQueue.map((r) => (
+            <div key={r.id} style={{ display: "flex", gap: 12, alignItems: "flex-start", padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
+              <span className="chip REJECT">✕ REJECTED{r.priority === "high" ? " · HIGH" : ""}</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>
+                  {r.vendor_name ?? "Unknown vendor"} · {r.invoice_number ?? r.filename} · {money(r)}
+                </div>
+                <div style={{ fontSize: 13, color: "var(--text-2)" }}>{r.headline}</div>
+              </div>
+              <a href={`/invoices/${r.id}`}><button className="ghost">replay</button></a>
+              <button onClick={() => resolve(r, "approved")}>Approve</button>
+              <button onClick={() => resolve(r, "rejected")}>Confirm reject</button>
             </div>
           ))}
         </div>

@@ -1,7 +1,7 @@
 // Core contracts — mirror SPEC.md §2–§4. SPEC is the source of truth.
 
-export type Outcome = "APPROVE" | "REVIEW" | "HOLD";
-export type Severity = "HOLD" | "REVIEW";
+export type Outcome = "APPROVE" | "REVIEW" | "REJECT" | "HOLD";
+export type Severity = "HOLD" | "REJECT" | "REVIEW";
 export type RuleCategory = "data" | "business" | "fraud";
 export type Confidence = "high" | "medium" | "low";
 
@@ -50,6 +50,7 @@ export interface Decision {
   security: boolean;
   headline: string;
   reasons: Reason[];
+  checks: { code: string; label: string; passed: boolean }[];
   checksPassed: number;
   checksTotal: number;
   matchedPo: string | null;

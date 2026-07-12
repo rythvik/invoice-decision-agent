@@ -13,6 +13,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     invoice: {
       ...invoice,
       reasons: invoice.reasons_json ? JSON.parse(invoice.reasons_json) : [],
+      checks: invoice.checks_json ? JSON.parse(invoice.checks_json) : [],
       extracted: invoice.extracted_json ? JSON.parse(invoice.extracted_json) : null,
     },
     events: getEvents(id),

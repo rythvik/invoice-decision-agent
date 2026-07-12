@@ -57,11 +57,18 @@ export default function InboxPage() {
     checkMail();
   }
   async function disconnect() {
-    if (!confirm("Disconnect this mailbox and remove its fetched emails from this app?")) return;
+    if (!confirm("Disconnect this mailbox? A CSV of its processed invoices downloads automatically first. This then removes the fetched emails and the decisions made from them — invoices you uploaded directly are kept.")) return;
+    // safety-net: download a CSV of exactly what's about to be wiped, before wiping it
+    const a = document.createElement("a");
+    a.href = "/api/invoices/export?inboxOnly=1";
+    a.download = "";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
     await fetch("/api/settings/email", { method: "DELETE" });
     setRuns([]);
     refreshEmail(); refreshInbox();
-    setNote("Disconnected — fetched emails removed.");
+    setNote("Disconnected — a CSV of the removed invoices was downloaded.");
   }
 
   async function consumeStream(res: Response) {

@@ -77,7 +77,7 @@ export async function* processInvoice(bytes: Buffer, filename: string, source: s
     t = now();
     yield emit("decide", "Reached a decision", "hold",
       "On hold — couldn't read this document.", { outcome: "HOLD", reasons: ["UNREADABLE_DOCUMENT"] }, t);
-    const decision = buildDecision("HOLD", "normal", false, [holdReason], 0, 1, null);
+    const decision = buildDecision("HOLD", "normal", false, [holdReason], [], 0, 1, null);
     persistDecision(runId, decision, null, null, null);
     return { runId, decision };
   }
@@ -92,12 +92,12 @@ export async function* processInvoice(bytes: Buffer, filename: string, source: s
     extractSummary + (lowFields.length ? ` · hard to read: ${lowFields.join(", ")}` : ""),
     { extracted: inv, provider: process.env.EXTRACTION_PROVIDER || "gemini" }, t);
 
-  // Not an invoice → graceful HOLD, skip the rest meaningfully
+  // Not an invoice → readable, just the wrong document type — a human can glance and decide
   if (!inv.is_invoice) {
-    const r = reason("NOT_AN_INVOICE", "data", "HOLD", "This document doesn't appear to be an invoice.", {});
+    const r = reason("NOT_AN_INVOICE", "data", "REVIEW", "This document doesn't appear to be an invoice.", {});
     t = now();
-    yield emit("decide", "Reached a decision", "hold", "On hold — this doesn't appear to be an invoice.", { outcome: "HOLD" }, t);
-    const decision = buildDecision("HOLD", "normal", false, [r], 0, 1, null);
+    yield emit("decide", "Reached a decision", "warning", "Needs review — this doesn't appear to be an invoice.", { outcome: "REVIEW" }, t);
+    const decision = buildDecision("REVIEW", "normal", false, [r], [{ code: "NOT_AN_INVOICE", label: "Document is an invoice", passed: false }], 0, 1, null);
     persistDecision(runId, decision, inv, null, null);
     return { runId, decision };
   }
@@ -126,8 +126,8 @@ export async function* processInvoice(bytes: Buffer, filename: string, source: s
   validateChecks.push(
     missing.length
       ? { code: "MISSING_CRITICAL_FIELD", label: "Critical fields present", passed: false,
-          reason: reason("MISSING_CRITICAL_FIELD", "data", "HOLD",
-            `Critical information is missing: ${missing.join(", ")}. Can't evaluate without it.`, { fields: missing }) }
+          reason: reason("MISSING_CRITICAL_FIELD", "data", "REVIEW",
+            `Critical information is missing: ${missing.join(", ")}. Worth a human glance.`, { fields: missing }) }
       : { code: "MISSING_CRITICAL_FIELD", label: "Critical fields present", passed: true }
   );
 
@@ -147,21 +147,25 @@ export async function* processInvoice(bytes: Buffer, filename: string, source: s
   validateChecks.push(
     !mathOk
       ? { code: "MATH_INCONSISTENT", label: "Numbers add up", passed: false,
-          reason: reason("MATH_INCONSISTENT", "data", "HOLD", `The numbers don't add up: ${mathDetail}.`, { detail: mathDetail }) }
+          reason: reason("MATH_INCONSISTENT", "data", "REJECT", `The numbers don't add up: ${mathDetail}.`, { detail: mathDetail }) }
       : { code: "MATH_INCONSISTENT", label: "Numbers add up", passed: true }
   );
 
   validateChecks.push(
     inv.field_confidence?.total === "low"
       ? { code: "LOW_CONFIDENCE_TOTAL", label: "Total read reliably", passed: false,
-          reason: reason("LOW_CONFIDENCE_TOTAL", "data", "HOLD", "Couldn't read the total amount reliably.", {}) }
+          reason: reason("LOW_CONFIDENCE_TOTAL", "data", "REVIEW", "Couldn't read the total amount reliably.", {}) }
       : { code: "LOW_CONFIDENCE_TOTAL", label: "Total read reliably", passed: true }
   );
 
-  const anyHold = validateChecks.some((c) => !c.passed);
+  const anyFired = validateChecks.some((c) => !c.passed);
+  const worstValidateSeverity = validateChecks.some((c) => c.reason?.severity === "REJECT")
+    ? "REJECT"
+    : anyFired ? "REVIEW" : null;
+  const validateStatus = worstValidateSeverity === "REJECT" ? "error" : worstValidateSeverity === "REVIEW" ? "warning" : "done";
   yield emit("validate", "Checked the numbers add up",
-    anyHold ? "hold" : "done",
-    anyHold
+    validateStatus,
+    anyFired
       ? validateChecks.find((c) => !c.passed)!.reason!.message
       : inv.subtotal != null && inv.tax != null && inv.total != null
         ? `${money(inv.subtotal, inv.currency)} + ${money(inv.tax, inv.currency)} tax${inv.discount ? ` − ${money(inv.discount, inv.currency)} discount` : ""} = ${money(inv.total, inv.currency)} ✓`
@@ -208,10 +212,12 @@ export async function* processInvoice(bytes: Buffer, filename: string, source: s
   // ── 8 · decide ────────────────────────────────────────────────
   t = now();
   const agg = aggregate(results);
-  const decision = buildDecision(agg.outcome, agg.priority, agg.security, agg.reasons, agg.checksPassed, agg.checksTotal, poMatch.po?.po_number ?? null);
+  const decision = buildDecision(agg.outcome, agg.priority, agg.security, agg.reasons, agg.checks, agg.checksPassed, agg.checksTotal, poMatch.po?.po_number ?? null);
   persistDecision(runId, decision, inv, vendorMatch.vendor?.external_id ?? null, amountBasis);
+  const decideStatus =
+    agg.outcome === "APPROVE" ? "done" : agg.outcome === "REVIEW" ? "warning" : agg.outcome === "REJECT" ? "error" : "hold";
   yield emit("decide", "Reached a decision",
-    agg.outcome === "APPROVE" ? "done" : agg.outcome === "REVIEW" ? "warning" : "hold",
+    decideStatus,
     decision.headline, { outcome: agg.outcome, priority: agg.priority, security: agg.security, reasons: agg.reasons.map((r) => r.code) }, t);
 
   return { runId, decision };
@@ -252,6 +258,8 @@ function headlineFor(d: Decision): string {
     return `Approved — matched ${d.matchedPo}; all ${d.checksTotal} checks passed.`;
   if (d.outcome === "HOLD")
     return `On hold — ${d.reasons.find((r) => r.severity === "HOLD")?.message ?? "can't evaluate this invoice."}`;
+  if (d.outcome === "REJECT")
+    return `Rejected — ${d.reasons.find((r) => r.severity === "REJECT")?.message ?? "this invoice failed a check that doesn't get a second look."}`;
   if (d.security)
     return `Security review — do not pay until verified. ${d.reasons.filter((r) => r.category === "fraud").map((r) => r.code.replaceAll("_", " ").toLowerCase()).join(", ")}.`;
   return `Needs review — ${d.reasons[0]?.message ?? "one or more checks flagged this invoice."}`;
@@ -259,9 +267,9 @@ function headlineFor(d: Decision): string {
 
 function buildDecision(
   outcome: Decision["outcome"], priority: Decision["priority"], security: boolean,
-  reasons: Reason[], checksPassed: number, checksTotal: number, matchedPo: string | null
+  reasons: Reason[], checks: Decision["checks"], checksPassed: number, checksTotal: number, matchedPo: string | null
 ): Decision {
-  const d: Decision = { outcome, priority, security, headline: "", reasons, checksPassed, checksTotal, matchedPo };
+  const d: Decision = { outcome, priority, security, headline: "", reasons, checks, checksPassed, checksTotal, matchedPo };
   d.headline = headlineFor(d);
   return d;
 }
@@ -273,6 +281,7 @@ function persistDecision(runId: string, d: Decision, inv: ExtractedInvoice | nul
     security: d.security ? 1 : 0,
     headline: d.headline,
     reasons_json: JSON.stringify(d.reasons),
+    checks_json: JSON.stringify(d.checks),
     matched_po: d.matchedPo,
     invoice_number: inv?.invoice_number ?? null,
     vendor_external_id: vendorExt,

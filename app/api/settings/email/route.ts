@@ -1,7 +1,7 @@
 // Email connection status + IMAP save/disconnect. Gmail OAuth is handled under
 // /api/auth/gmail/*. POST here tests IMAP credentials before saving.
 import { ensureSeeded } from "@/lib/bootstrap";
-import { clearInbox } from "@/lib/db";
+import { clearEmailData } from "@/lib/db";
 import { getEmailConfig, saveEmailConfig, clearEmailConfig } from "@/lib/ingestion/config";
 import { emailStatus } from "@/lib/ingestion";
 import { clearGoogleAuth } from "@/lib/ingestion/google";
@@ -48,6 +48,6 @@ export async function DELETE() {
   ensureSeeded();
   clearGoogleAuth();
   clearEmailConfig();
-  clearInbox(); // privacy: don't retain a disconnected account's emails + attachments
+  clearEmailData(); // privacy: forget the account's emails, attachments, and the decisions made from them
   return Response.json({ ok: true });
 }

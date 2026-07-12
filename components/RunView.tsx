@@ -9,13 +9,38 @@ export interface UiStageEvent {
 }
 
 export interface UiDecision {
-  outcome: "APPROVE" | "REVIEW" | "HOLD";
+  outcome: "APPROVE" | "REVIEW" | "REJECT" | "HOLD";
   priority: "normal" | "high";
   security: boolean;
   headline: string;
-  reasons: { code: string; category: string; severity: string; message: string }[];
+  reasons: { code: string; category: string; severity: string; message: string; evidence?: Record<string, unknown> }[];
+  checks: { code: string; label: string; passed: boolean }[];
   checksPassed: number; checksTotal: number;
   matchedPo: string | null;
+}
+
+/** The compact, glanceable subset of checks shown on every decision card. */
+const CHECKLIST_SPEC: { codes: string[]; label: string }[] = [
+  { codes: ["UNKNOWN_VENDOR"], label: "Vendor" },
+  { codes: ["PO_NOT_FOUND"], label: "PO" },
+  { codes: ["MISSING_CRITICAL_FIELD"], label: "Invoice #" },
+  { codes: ["BANK_ACCOUNT_CHANGED"], label: "Bank" },
+  { codes: ["DUPLICATE"], label: "Duplicate" },
+  { codes: ["AMOUNT_SIGNIFICANTLY_OVER", "AMOUNT_OVER_TOLERANCE", "AMOUNT_BANDS"], label: "Amount" },
+];
+
+function buildChecklist(d: UiDecision): { label: string; passed: boolean; detail: string | null }[] {
+  const byCode = new Map(d.checks.map((c) => [c.code, c]));
+  const reasonByCode = new Map(d.reasons.map((r) => [r.code, r]));
+  const items: { label: string; passed: boolean; detail: string | null }[] = [];
+  for (const { codes, label } of CHECKLIST_SPEC) {
+    const code = codes.find((c) => byCode.has(c));
+    if (!code) continue;
+    const check = byCode.get(code)!;
+    const pct = reasonByCode.get(code)?.evidence?.pct_over;
+    items.push({ label, passed: check.passed, detail: !check.passed && typeof pct === "number" ? `${pct}%` : null });
+  }
+  return items;
 }
 
 function Icon({ status }: { status: UiStageEvent["status"] }) {
@@ -52,18 +77,30 @@ export function StageRow({ ev }: { ev: UiStageEvent }) {
   );
 }
 
+const OUTCOME_LABEL: Record<UiDecision["outcome"], string> = {
+  APPROVE: "APPROVED", REVIEW: "NEEDS REVIEW", REJECT: "REJECTED", HOLD: "ON HOLD",
+};
+
 export function DecisionCard({ d }: { d: UiDecision }) {
   const cls = `decision ${d.outcome}${d.security ? " security" : ""}`;
+  const checklist = buildChecklist(d);
   return (
     <div className={cls}>
       <div>
-        <span className={`badge ${d.outcome}`}>
-          {d.outcome === "APPROVE" ? "APPROVED" : d.outcome === "REVIEW" ? "NEEDS REVIEW" : "ON HOLD"}
-        </span>
+        <span className={`badge ${d.outcome}`}>{OUTCOME_LABEL[d.outcome]}</span>
         {d.security && <span className="badge security">🛡 SECURITY — DO NOT PAY UNTIL VERIFIED</span>}
         {d.priority === "high" && !d.security && <span className="badge high">HIGH PRIORITY</span>}
       </div>
       <div className="headline">{d.headline}</div>
+      {checklist.length > 0 && (
+        <div className="checklist">
+          {checklist.map((c) => (
+            <span key={c.label} className={`checklist-item ${c.passed ? "pass" : "fail"}`}>
+              {c.label} {c.passed ? "✓" : "✗"}{c.detail ? ` ${c.detail}` : ""}
+            </span>
+          ))}
+        </div>
+      )}
       {d.reasons.length > 0 && (
         <ul>
           {d.reasons.map((r) => (

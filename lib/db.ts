@@ -22,7 +22,17 @@ export function db(): Database.Database {
   _db = new Database(p);
   _db.pragma("journal_mode = WAL");
   _db.exec(SCHEMA);
+  migrate(_db);
   return _db;
+}
+
+/** Lightweight in-place migrations for columns added after a DB already exists locally. */
+function migrate(d: Database.Database): void {
+  try {
+    d.exec("ALTER TABLE invoices ADD COLUMN checks_json TEXT");
+  } catch {
+    /* column already exists */
+  }
 }
 
 // Tables (all browsable in any SQLite viewer):
@@ -46,7 +56,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   id TEXT PRIMARY KEY, source TEXT NOT NULL, filename TEXT NOT NULL,
   inbox_id TEXT, started_at TEXT NOT NULL, finished_at TEXT,
   outcome TEXT, priority TEXT, security INTEGER NOT NULL DEFAULT 0,
-  headline TEXT, reasons_json TEXT, matched_po TEXT,
+  headline TEXT, reasons_json TEXT, checks_json TEXT, matched_po TEXT,
   invoice_number TEXT, vendor_external_id TEXT, vendor_name TEXT,
   currency TEXT, amount_basis REAL, total REAL,
   extracted_json TEXT, checks_passed INTEGER, checks_total INTEGER,
@@ -207,6 +217,20 @@ export function markInboxProcessed(id: string): void {
 /** Forget all fetched emails + their stored attachments (used when disconnecting an account). */
 export function clearInbox(): void {
   db().exec("DELETE FROM inbox;");
+  fs.rmSync(mailDir(), { recursive: true, force: true });
+}
+
+/**
+ * Forget everything derived from a mailbox: the fetched emails, their attachments,
+ * AND the decisions made from them (audit trail included). Invoices processed via
+ * Upload (inbox_id IS NULL) are kept — they never came from the mailbox.
+ */
+export function clearEmailData(): void {
+  db().exec(`
+    DELETE FROM audit_log WHERE invoice_id IN (SELECT id FROM invoices WHERE inbox_id IS NOT NULL);
+    DELETE FROM invoices WHERE inbox_id IS NOT NULL;
+    DELETE FROM inbox;
+  `);
   fs.rmSync(mailDir(), { recursive: true, force: true });
 }
 

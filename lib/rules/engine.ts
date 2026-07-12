@@ -76,7 +76,7 @@ export function runRules(opts: {
   // UNKNOWN_VENDOR
   results.push(
     !vendor
-      ? fired("UNKNOWN_VENDOR", "Vendor is approved", "business", "REVIEW",
+      ? fired("UNKNOWN_VENDOR", "Vendor is approved", "business", "REJECT",
           `${inv.vendor_name ?? "This vendor"} isn't in the approved vendor list.`,
           { vendor_name: inv.vendor_name, best_similarity: vendorMatch.score })
       : passed("UNKNOWN_VENDOR", "Vendor is approved")
@@ -85,7 +85,7 @@ export function runRules(opts: {
   // VENDOR_INACTIVE
   results.push(
     vendor && vendor.status !== "active"
-      ? fired("VENDOR_INACTIVE", "Vendor is active", "business", "REVIEW",
+      ? fired("VENDOR_INACTIVE", "Vendor is active", "business", "REJECT",
           `${vendor.name} is marked inactive — they shouldn't be billing us.`, { status: vendor.status })
       : passed("VENDOR_INACTIVE", "Vendor is active")
   );
@@ -93,14 +93,14 @@ export function runRules(opts: {
   // PO_NOT_FOUND / PO_VENDOR_MISMATCH / PO_MATCH_AMBIGUOUS
   if (!po) {
     if (poMatch.refNotFound) {
-      results.push(fired("PO_NOT_FOUND", "PO matched", "business", "REVIEW",
+      results.push(fired("PO_NOT_FOUND", "PO matched", "business", "REJECT",
         `PO ${poMatch.refNotFound} isn't in our purchase order register.`, { ref: poMatch.refNotFound }));
     } else if (poMatch.ambiguousCount > 1) {
       results.push(fired("PO_MATCH_AMBIGUOUS", "PO matched", "business", "REVIEW",
         `Couldn't confidently pick between ${poMatch.ambiguousCount} open POs for this vendor.`,
         { candidates: poMatch.ambiguousCount }));
     } else {
-      results.push(fired("PO_NOT_FOUND", "PO matched", "business", "REVIEW",
+      results.push(fired("PO_NOT_FOUND", "PO matched", "business", "REJECT",
         "No PO reference found and none could be inferred.", {}));
     }
   } else {
@@ -108,7 +108,7 @@ export function runRules(opts: {
     // PO_VENDOR_MISMATCH
     results.push(
       vendor && po.vendor_external_id !== vendor.external_id
-        ? fired("PO_VENDOR_MISMATCH", "PO belongs to this vendor", "business", "REVIEW",
+        ? fired("PO_VENDOR_MISMATCH", "PO belongs to this vendor", "business", "REJECT",
             `Invoice is from ${vendor.name} but PO ${po.po_number} belongs to a different vendor.`,
             { po: po.po_number, po_vendor: po.vendor_external_id, invoice_vendor: vendor.external_id })
         : passed("PO_VENDOR_MISMATCH", "PO belongs to this vendor")
@@ -129,7 +129,7 @@ export function runRules(opts: {
     const dupe = findDuplicate(inv.invoice_number, vendorKey);
     results.push(
       dupe
-        ? fired("DUPLICATE", "Not a duplicate", "business", "REVIEW",
+        ? fired("DUPLICATE", "Not a duplicate", "business", "REJECT",
             `Looks like a duplicate of invoice ${inv.invoice_number}, already processed on ${String(dupe.started_at).slice(0, 10)}.`,
             { original_run: dupe.id, original_outcome: dupe.outcome, original_date: dupe.started_at })
         : passed("DUPLICATE", "Not a duplicate")
@@ -143,13 +143,17 @@ export function runRules(opts: {
     const { sum: approvedSum, count: priorCount } = approvedToDate(po.po_number);
     const remaining = po.total_amount - approvedSum;
     const over = amountBasis - remaining;
-    const pct = remaining > 0 ? over / remaining : Infinity;
+    // null = the PO has no remaining budget at all (already fully or over-consumed) — the
+    // "over remaining" ratio is undefined, not a finite percentage.
+    const pct = remaining > 0 ? over / remaining : null;
 
-    if (over > 0 && pct > SIGNIFICANT) {
-      results.push(fired("AMOUNT_SIGNIFICANTLY_OVER", "Amount within tolerance", "business", "REVIEW",
-        `Invoice is ${(pct * 100).toFixed(1)}% over the PO's remaining value (${money(amountBasis, po.currency)} vs ${money(remaining, po.currency)}) — well beyond the 5% tolerance.`,
-        { basis: amountBasis, remaining, pct_over: +(pct * 100).toFixed(1) }));
-    } else if (over > 0 && pct > TOLERANCE) {
+    if (over > 0 && (pct === null || pct > SIGNIFICANT)) {
+      const message = pct === null
+        ? `This PO has no remaining budget — already billed ${money(approvedSum, po.currency)} of ${money(po.total_amount, po.currency)}, and this invoice would add ${money(amountBasis, po.currency)} more.`
+        : `Invoice is ${(pct * 100).toFixed(1)}% over the PO's remaining value (${money(amountBasis, po.currency)} vs ${money(remaining, po.currency)}) — well beyond the 5% tolerance.`;
+      results.push(fired("AMOUNT_SIGNIFICANTLY_OVER", "Amount within tolerance", "business", "REJECT",
+        message, { basis: amountBasis, remaining, pct_over: pct === null ? null : +(pct * 100).toFixed(1) }));
+    } else if (over > 0 && pct !== null && pct > TOLERANCE) {
       results.push(fired("AMOUNT_OVER_TOLERANCE", "Amount within tolerance", "business", "REVIEW",
         `Invoice is ${(pct * 100).toFixed(1)}% over the PO's remaining value (${money(amountBasis, po.currency)} vs ${money(remaining, po.currency)}) — beyond the 5% tolerance.`,
         { basis: amountBasis, remaining, pct_over: +(pct * 100).toFixed(1) }));
@@ -162,7 +166,7 @@ export function runRules(opts: {
     const overbilled = priorCount > 0 && cumulative > po.total_amount * (1 + TOLERANCE);
     results.push(
       overbilled
-        ? fired("PO_OVERBILLED", "PO not over-billed cumulatively", "business", "REVIEW",
+        ? fired("PO_OVERBILLED", "PO not over-billed cumulatively", "business", "REJECT",
             `With this invoice, PO ${po.po_number} would be billed ${money(cumulative, po.currency)} of ${money(po.total_amount, po.currency)} (${((cumulative / po.total_amount) * 100).toFixed(0)}%) across ${priorCount + 1} invoices — over-billed.`,
             { cumulative, po_total: po.total_amount, invoices: priorCount + 1 })
         : passed("PO_OVERBILLED", "PO not over-billed cumulatively")
@@ -178,7 +182,7 @@ export function runRules(opts: {
     bankChanged = last4.length === 4 && last4 !== vendor.bank_account_last4;
     results.push(
       bankChanged
-        ? fired("BANK_ACCOUNT_CHANGED", "Bank account matches file", "fraud", "REVIEW",
+        ? fired("BANK_ACCOUNT_CHANGED", "Bank account matches file", "fraud", "REJECT",
             `Bank account differs from the one on file (****${vendor.bank_account_last4}). Classic BEC pattern — verify with the vendor by phone before paying.`,
             { invoice_last4: last4, master_last4: vendor.bank_account_last4 })
         : passed("BANK_ACCOUNT_CHANGED", "Bank account matches file")
@@ -190,7 +194,7 @@ export function runRules(opts: {
   // TAX_ID_MISMATCH
   results.push(
     vendor?.tax_id && inv.vendor_tax_id && inv.vendor_tax_id.replace(/\D/g, "") !== vendor.tax_id.replace(/\D/g, "")
-      ? fired("TAX_ID_MISMATCH", "Tax ID matches file", "fraud", "REVIEW",
+      ? fired("TAX_ID_MISMATCH", "Tax ID matches file", "fraud", "REJECT",
           "Tax ID doesn't match the vendor's registration on file.",
           { invoice_tax_id: inv.vendor_tax_id, master_tax_id: vendor.tax_id })
       : passed("TAX_ID_MISMATCH", "Tax ID matches file")
@@ -200,7 +204,7 @@ export function runRules(opts: {
   results.push(
     inv.remit_to_name && inv.vendor_name &&
       similarity(normalizeName(inv.remit_to_name), normalizeName(inv.vendor_name)) < 0.7
-      ? fired("REMIT_TO_MISMATCH", "Payee is the vendor", "fraud", "REVIEW",
+      ? fired("REMIT_TO_MISMATCH", "Payee is the vendor", "fraud", "REJECT",
           `Payment is directed to "${inv.remit_to_name}" — not the vendor's name.`,
           { remit_to: inv.remit_to_name, vendor: inv.vendor_name })
       : passed("REMIT_TO_MISMATCH", "Payee is the vendor")
@@ -211,7 +215,7 @@ export function runRules(opts: {
     const domain = inv.vendor_email?.split("@")[1];
     results.push(
       vendor?.email_domain && domain && isLookalikeDomain(domain, vendor.email_domain)
-        ? fired("LOOKALIKE_EMAIL_DOMAIN", "Email domain is genuine", "fraud", "REVIEW",
+        ? fired("LOOKALIKE_EMAIL_DOMAIN", "Email domain is genuine", "fraud", "REJECT",
             `Sender domain ${domain} looks like — but isn't — the vendor's real domain ${vendor.email_domain}.`,
             { invoice_domain: domain, master_domain: vendor.email_domain })
         : passed("LOOKALIKE_EMAIL_DOMAIN", "Email domain is genuine")
@@ -221,7 +225,7 @@ export function runRules(opts: {
   // URGENCY_LANGUAGE
   results.push(
     inv.urgency_language.length > 0
-      ? fired("URGENCY_LANGUAGE", "No pressure language", "fraud", "REVIEW",
+      ? fired("URGENCY_LANGUAGE", "No pressure language", "fraud", "REJECT",
           `Pressure language on the invoice: ${inv.urgency_language.map((p) => `"${p}"`).join(", ")}. Legitimate vendors rarely do this.`,
           { phrases: inv.urgency_language })
       : passed("URGENCY_LANGUAGE", "No pressure language")
@@ -230,7 +234,7 @@ export function runRules(opts: {
   // ROUND_AMOUNT_NO_DETAIL
   results.push(
     inv.total != null && inv.total >= 5000 && inv.total % 1000 === 0 && inv.line_items.length <= 1
-      ? fired("ROUND_AMOUNT_NO_DETAIL", "Amount has real detail", "fraud", "REVIEW",
+      ? fired("ROUND_AMOUNT_NO_DETAIL", "Amount has real detail", "fraud", "REJECT",
           `A suspiciously round ${money(inv.total, inv.currency)} with no line-item detail.`,
           { total: inv.total, line_items: inv.line_items.length })
       : passed("ROUND_AMOUNT_NO_DETAIL", "Amount has real detail")
@@ -239,7 +243,7 @@ export function runRules(opts: {
   // DORMANT_VENDOR_ACTIVITY
   results.push(
     vendor && vendor.status !== "active" && bankChanged
-      ? fired("DORMANT_VENDOR_ACTIVITY", "No dormant-vendor anomaly", "fraud", "REVIEW",
+      ? fired("DORMANT_VENDOR_ACTIVITY", "No dormant-vendor anomaly", "fraud", "REJECT",
           "An inactive vendor suddenly invoicing with new bank details — treat as suspect.",
           { vendor: vendor.name })
       : passed("DORMANT_VENDOR_ACTIVITY", "No dormant-vendor anomaly")
@@ -250,28 +254,31 @@ export function runRules(opts: {
 
 /** Aggregate check results into the final decision fields. SPEC §2 + §5. */
 export function aggregate(results: CheckResult[]): {
-  outcome: "APPROVE" | "REVIEW" | "HOLD";
+  outcome: "APPROVE" | "REVIEW" | "REJECT" | "HOLD";
   priority: "normal" | "high";
   security: boolean;
   reasons: Reason[];
+  checks: { code: string; label: string; passed: boolean }[];
   checksPassed: number;
   checksTotal: number;
 } {
   const reasons = results.filter((r) => !r.passed && r.reason).map((r) => r.reason!);
+  // Precedence: HOLD (can't evaluate) > REJECT (evaluated, decisive no) > REVIEW (soft/ambiguous) > APPROVE
   const outcome = reasons.some((r) => r.severity === "HOLD")
     ? "HOLD"
-    : reasons.length > 0
-      ? "REVIEW"
-      : "APPROVE";
+    : reasons.some((r) => r.severity === "REJECT")
+      ? "REJECT"
+      : reasons.length > 0
+        ? "REVIEW"
+        : "APPROVE";
   const security = reasons.some((r) => r.category === "fraud");
-  const highCodes = new Set(["AMOUNT_SIGNIFICANTLY_OVER", "PO_OVERBILLED"]);
-  const priority =
-    security || reasons.some((r) => highCodes.has(r.code)) || reasons.length >= 3 ? "high" : "normal";
+  const priority = outcome === "REJECT" || security || reasons.length >= 3 ? "high" : "normal";
   return {
     outcome,
     priority,
     security,
     reasons,
+    checks: results.map((r) => ({ code: r.code, label: r.label, passed: r.passed })),
     checksPassed: results.filter((r) => r.passed).length,
     checksTotal: results.length,
   };

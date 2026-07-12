@@ -21,6 +21,7 @@ export default function InvoiceReplay() {
             outcome: j.invoice.outcome, priority: j.invoice.priority ?? "normal",
             security: Boolean(j.invoice.security), headline: j.invoice.headline ?? "",
             reasons: j.invoice.reasons ?? [],
+            checks: j.invoice.checks ?? [],
             checksPassed: j.invoice.checks_passed ?? 0, checksTotal: j.invoice.checks_total ?? 0,
             matchedPo: j.invoice.matched_po,
           });
