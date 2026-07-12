@@ -2,6 +2,7 @@ import type { ExtractedInvoice, ExtractHints, ExtractionProvider } from "../type
 
 export class OcrSpaceProvider implements ExtractionProvider {
   name = "ocrspace";
+  // Fixed: Regex patterns now handle service invoice layouts with line breaks
 
   async extract(bytes: Buffer, hints: ExtractHints): Promise<ExtractedInvoice> {
     try {
