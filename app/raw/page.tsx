@@ -31,7 +31,11 @@ export default function RawView() {
   if (!data) return <pre style={pre}>loading…</pre>;
 
   return (
-    <div style={{ padding: 16, fontFamily: "ui-monospace, monospace", fontSize: 12, color: "#d4d4d4", background: "#0b0b0b", minHeight: "100vh" }}>
+    // Breaks out of the app-wide .shell (max-width: 900px) — this page is a raw data
+    // dump, not a polished screen, so it gets the full viewport width instead of being
+    // squeezed into the same column as Inbox/Dashboard.
+    <div style={{ ...breakout, padding: 16, fontFamily: "ui-monospace, monospace", fontSize: 12, color: "#d4d4d4", background: "#0b0b0b", minHeight: "100vh" }}>
+      <style>{`.raw-scroll::-webkit-scrollbar { height: 10px; } .raw-scroll::-webkit-scrollbar-thumb { background: #444; border-radius: 5px; } .raw-scroll { scrollbar-width: thin; scrollbar-color: #444 transparent; }`}</style>
       <div style={{ marginBottom: 12, color: "#888" }}>
         raw sqlite tables · storage/app.db · polling every 2s · last updated {updatedAt}
       </div>
@@ -67,8 +71,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function Table({ rows, cols }: { rows: Record<string, unknown>[]; cols: string[] }) {
   if (!rows.length) return <div style={{ color: "#555" }}>(empty)</div>;
   return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ borderCollapse: "collapse", width: "100%" }}>
+    <div className="raw-scroll" style={{ overflowX: "auto", border: "1px solid #222", borderRadius: 6 }}>
+      <table style={{ borderCollapse: "collapse", width: "max-content", minWidth: "100%" }}>
         <thead>
           <tr>
             {cols.map((c) => (
@@ -93,3 +97,5 @@ function Table({ rows, cols }: { rows: Record<string, unknown>[]; cols: string[]
 const th: React.CSSProperties = { textAlign: "left", borderBottom: "1px solid #333", padding: "4px 8px", color: "#888", whiteSpace: "nowrap" };
 const td: React.CSSProperties = { borderBottom: "1px solid #1a1a1a", padding: "4px 8px", whiteSpace: "nowrap", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis" };
 const pre: React.CSSProperties = { padding: 16, color: "#888", background: "#0b0b0b", minHeight: "100vh" };
+// Escapes the app-wide .shell's max-width: 900px so this page can use the full viewport.
+const breakout: React.CSSProperties = { width: "100vw", maxWidth: "100vw", marginLeft: "calc(50% - 50vw)" };
