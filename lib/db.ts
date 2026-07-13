@@ -149,6 +149,11 @@ export function getEvents(invoiceId: string): StageEvent[] {
     }));
 }
 
+/** Most recent audit_log rows across all invoices — raw feed for the /raw debug view. */
+export function getRecentAuditLog(limit = 40): any[] {
+  return db().prepare("SELECT * FROM audit_log ORDER BY id DESC LIMIT ?").all(limit);
+}
+
 // ── decision-support queries ───────────────────────────────────
 /** Prior processed invoice with same number + vendor (duplicate check). */
 export function findDuplicate(invoiceNumber: string, vendorKey: string): any {
