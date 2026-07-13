@@ -44,12 +44,12 @@ export default function RawView() {
         <Table rows={data.auditLog} cols={["id", "invoice_id", "stage", "name", "status", "summary", "started_at"]} />
       </Section>
 
-      <Section title={`vendors master (${data.vendors.length})`}>
-        <Table rows={data.vendors} cols={["external_id", "name", "status", "email"]} />
+      <Section title={`vendors master (${data.vendors.length}) — every field the rules check`}>
+        <Table rows={data.vendors} cols={["external_id", "name", "aliases_json", "status", "email", "email_domain", "tax_id", "bank_account_last4"]} />
       </Section>
 
-      <Section title={`purchase_orders master (${data.purchaseOrders.length})`}>
-        <Table rows={data.purchaseOrders} cols={["po_number", "vendor_external_id", "status", "total_amount"]} />
+      <Section title={`purchase_orders master (${data.purchaseOrders.length}) — every field the rules check`}>
+        <Table rows={data.purchaseOrders} cols={["po_number", "vendor_external_id", "status", "currency", "total_amount", "line_items_json"]} />
       </Section>
     </div>
   );
