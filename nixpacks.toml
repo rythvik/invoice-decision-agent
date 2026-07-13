@@ -2,4 +2,4 @@
 # works from the Railway console during a live demo — the app itself only needs
 # the better-sqlite3 npm binding, which doesn't include the command-line tool.
 [phases.setup]
-nixPkgs = ["...", "sqlite"]
+aptPkgs = ["sqlite3"]
