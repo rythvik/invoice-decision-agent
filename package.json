@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0",
-    "google-auth-library": "^9.14.1",
     "imapflow": "^1.0.171",
     "mailparser": "^3.7.2",
     "next": "^15.3.0",

@@ -36,7 +36,7 @@ class FallbackChain implements ExtractionProvider {
 }
 
 export function getProvider(): ExtractionProvider {
-  const names = (process.env.EXTRACTION_PROVIDER || "vision").split(",").map((s) => s.trim()).filter(Boolean);
+  const names = (process.env.EXTRACTION_PROVIDER || "ocrspace").split(",").map((s) => s.trim()).filter(Boolean);
   const chain = names.map(build);
   const base = chain.length === 1 ? chain[0] : new FallbackChain(chain);
   return process.env.EXTRACTION_CACHE === "off" ? base : new CachingProvider(base);

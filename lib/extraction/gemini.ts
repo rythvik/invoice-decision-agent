@@ -23,12 +23,15 @@ export class GeminiProvider implements ExtractionProvider {
     this.apiKey = process.env.GEMINI_API_KEY || "";
     this.models = (process.env.GEMINI_MODEL || "gemini-flash-latest")
       .split(",").map((m) => m.trim()).filter(Boolean);
-    if (!this.apiKey || this.apiKey.startsWith("PASTE")) {
-      throw new Error("GEMINI_API_KEY is not set. Paste your key into .env.local");
-    }
   }
 
   async extract(bytes: Buffer, hints: ExtractHints): Promise<ExtractedInvoice> {
+    // Validated here, not in the constructor: getProvider() builds every provider in
+    // the fallback chain up front, so throwing eagerly would break ocrspace/ollama
+    // even when they'd have succeeded on their own.
+    if (!this.apiKey || this.apiKey.startsWith("PASTE")) {
+      throw new Error("GEMINI_API_KEY is not set. Paste your key into .env.local");
+    }
     let lastErr: unknown = null;
     for (const model of this.models) {
       try {
